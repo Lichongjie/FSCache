@@ -1,3 +1,3 @@
 # FSCache
  
-a client on-heap alluxio.client.file.cache for filesystem such as alluxio
+a client on-heap cache module for filesystem such as alluxio
