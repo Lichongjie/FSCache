@@ -11,8 +11,8 @@
 
 package alluxio.client.file.cache;
 
-
 import alluxio.client.file.FileInStream;
+import alluxio.client.file.FileSystemContext;
 import alluxio.client.file.URIStatus;
 import alluxio.exception.PreconditionMessage;
 import com.google.common.base.Preconditions;
@@ -23,67 +23,77 @@ public class FileInStreamWithCache extends FileInStream {
   protected final ClientCacheContext mCacheContext;
   public static FileInStream mIn;
   public CacheManager mCachePolicy;
-  public static URIStatus mStatus;
+  private long mPosition;
+  private URIStatus mStatus;
 
-  public long searchTime() {
-    return mCacheContext.getSearchTime();
-  }
-
-  public long insertTime(){
-    return mCacheContext.getInsertTime();
-  }
-
-  public FileInStreamWithCache(FileInStream in, ClientCacheContext context) {
-    super();
+  public FileInStreamWithCache(FileInStream in, ClientCacheContext context, URIStatus status) {
+    super(status, null , FileSystemContext.INSTANCE);
     mIn = in;
     mCacheContext = context;
 		mCachePolicy = mCacheContext.CACHE_POLICY;
-		mStatus = mIn.mStatus;
+		mStatus = status;
+		mPosition = 0;
   }
+
+  public long getPos() {
+  	return mPosition;
+	}
+
+	public URIStatus getStatus() {
+  	return mStatus;
+	}
 
 	@Override
 	public int positionedRead(long pos, byte[] b, int off, int len) throws IOException {
 		return read0(pos, b, off, len);
 	}
 
+	public int innerRead(byte[] b, int off, int len) throws  IOException {
+  	int res =  super.read(b, off, len);
+  	if(res > 0) mPosition += res;
+  	return res;
+	}
+
+	public int innerPositionRead(long pos, byte[] b, int off, int len) throws IOException {
+  	return super.positionedRead(pos, b, off, len);
+	}
+
+
 	private int read0(long pos, byte[] b, int off, int len) throws IOException {
 		boolean isPosition = false;
-  	if(pos != mIn.mPosition) {
+  	if(pos != mPosition) {
 			isPosition = true;
 		}
-  	long length = mIn.mStatus.getLength();
+  	long length = mStatus.getLength();
 		if (pos < 0 || pos >=  length) {
 			return -1;
 		}
 
 		if (len == 0) {
 			return 0;
-		} else if (pos == mIn.mStatus.getLength()) { // at end of file
+		} else if (pos == mStatus.getLength()) { // at end of file
 			return -1;
 		}
-		CacheUnit unit = mCacheContext.getCache(mIn.mStatus, pos, Math.min(pos + len, pos + (int)mIn
+		CacheUnit unit = mCacheContext.getCache(mStatus, pos, Math.min(pos + len, pos + (int)mIn
 			.remaining()));
 		if(unit.isFinish()) {
 			int remaining = mCachePolicy.read((CacheInternalUnit)unit, b, off, pos,
 				len);
 			if(!isPosition) {
-				mIn.mPosition += remaining;
+				mPosition += remaining;
 			}
 			return remaining;
 			//return -1;
 		}
 		else {
 			int res;
-			if(unit.getBegin() == 49283072) {
-				System.out.println("read new" + unit.getEnd());
-			}
 			if (mCacheContext.mAllowCache) {
 				TempCacheUnit tmpUnit = (TempCacheUnit) unit;
-				tmpUnit.setInStream(mIn);
+				tmpUnit.setInStream(this);
 				res = mCachePolicy.read(tmpUnit, b, off, len, pos);
 				if (res != len) {
 					// the end of file
-					tmpUnit.resetEnd((int) mIn.mStatus.getLength());
+					tmpUnit.resetEnd((int) mStatus.getLength());
 				}
 			} else {
 				for(int index: ((TempCacheUnit)unit).lockedIndex ) {
@@ -92,7 +102,7 @@ public class FileInStreamWithCache extends FileInStream {
 				if (isPosition) {
 					res = mIn.positionedRead(pos, b, off, len);
 				} else {
-					res = mIn.read(b, off, len);
+					res = innerRead(b, off, len);
 				}
 			}
 
@@ -105,7 +115,7 @@ public class FileInStreamWithCache extends FileInStream {
     Preconditions.checkArgument(b != null, PreconditionMessage.ERR_READ_BUFFER_NULL);
     Preconditions.checkArgument(off >= 0 && len >= 0 && len + off <= b.length,
         PreconditionMessage.ERR_BUFFER_STATE.toString(), b.length, off, len);
-    return read0(mIn.mPosition, b, off, len);
+    return read0(mPosition, b, off, len);
   }
 
   /**
@@ -119,27 +129,26 @@ public class FileInStreamWithCache extends FileInStream {
         PreconditionMessage.ERR_BUFFER_STATE.toString(), b.length, off, len);
     if (len == 0) {
       return 0;
-    } else if (mIn.mPosition == mIn.mStatus.getLength()) { // at end of file
+    } else if (mPosition == mStatus.getLength()) { // at end of file
       return -1;
     }
-    int pos = (int)mIn.mPosition;
-    CacheUnit unit = mCacheContext.getCache(mIn.mStatus, pos, Math.min(pos + len, pos + (int)mIn
+    long pos = mPosition;
+    CacheUnit unit = mCacheContext.getCache(mStatus, pos, Math.min(pos + len, pos + (int)mIn
         .remaining()));
     //TempCacheUnit unit = new TempCacheUnit(1,1,0);
     if(unit.isFinish()) {
       int remaining = ((CacheInternalUnit)unit).positionedRead(b, off, pos, len);
-      mIn.mPosition += remaining;
-
+      if (remaining > 0) mPosition += remaining;
       return remaining;
       //return -1;
     }
     else {
-      int res = mIn.read(b,off,len);
+      int res = innerRead(b,off,len);
       if(res > 0) {
         TempCacheUnit tempUnit = (TempCacheUnit) unit;
         if(res!=len) {
           // the end of file
-          tempUnit.resetEnd((int)mIn.mStatus.getLength());
+          tempUnit.resetEnd((int)mStatus.getLength());
           mCacheContext.REVERSE = false;
         }
         tempUnit.addCache(b, off, res);
@@ -154,7 +163,11 @@ public class FileInStreamWithCache extends FileInStream {
 
   @Override
   public long skip(long n) throws IOException {
-    return mIn.skip(n);
+    long skipLength = mIn.skip(n);
+    if(skipLength >0) {
+			mPosition += skipLength;
+		}
+    return skipLength;
   }
 
   /*

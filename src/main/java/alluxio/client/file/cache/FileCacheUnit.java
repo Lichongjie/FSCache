@@ -22,7 +22,7 @@ public class FileCacheUnit {
   private DoubleLinkedList<CacheInternalUnit> cacheList;
   private long mFileId;
   private long mLength;
-  private DoubleLinkedList<CacheInternalUnit>  mFreeList = new DoubleLinkedList<>(new CacheInternalUnit(0,0,-1));
+  private DoubleLinkedList<CacheInternalUnit> mFreeList = new DoubleLinkedList<>(new CacheInternalUnit(0,0,-1));
   public LinkedFileBucket mBuckets;
   private static boolean use_bucket;
   private final ClientCacheContext.LockManager mLockManager;

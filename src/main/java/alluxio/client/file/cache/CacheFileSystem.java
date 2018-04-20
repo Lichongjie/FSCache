@@ -12,6 +12,9 @@
 package alluxio.client.file.cache;
 
 import alluxio.AlluxioURI;
+import alluxio.client.file.BaseFileSystem;
+import alluxio.client.file.FileInStream;
+import alluxio.client.file.FileSystemContext;
 import alluxio.client.file.options.OpenFileOptions;
 import alluxio.exception.AlluxioException;
 import alluxio.exception.FileDoesNotExistException;
@@ -53,9 +56,7 @@ public class CacheFileSystem extends BaseFileSystem {
   @Override
   public FileInStream openFile(AlluxioURI path, OpenFileOptions options) throws FileDoesNotExistException, IOException, AlluxioException {
     FileInStream in = super.openFile(path, options);
-    return new FileInStreamWithCache(in, mCacheContext);
+    return new FileInStreamWithCache(in, mCacheContext, super.getStatus(path));
   }
-
-
 
 }

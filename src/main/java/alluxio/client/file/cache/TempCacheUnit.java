@@ -11,9 +11,9 @@
 
 package alluxio.client.file.cache;
 
-import alluxio.client.file.FileInStream;
 import alluxio.client.file.cache.struct.LinkNode;
-import io.netty.buffer.*;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 
 import java.io.IOException;
 import java.util.*;
@@ -27,7 +27,7 @@ public class TempCacheUnit extends LinkNode<TempCacheUnit> implements CacheUnit 
   private List<ByteBuf> mData = new LinkedList<>();
   CacheInternalUnit mBefore;
   CacheInternalUnit mAfter;
-  public FileInStream in;
+  public FileInStreamWithCache in;
   private final long mSize;
   private long mNewCacheSize;
   public Set<Integer> lockedIndex = new LinkedHashSet<>();
@@ -68,7 +68,7 @@ public class TempCacheUnit extends LinkNode<TempCacheUnit> implements CacheUnit 
    // mData = ByteBufAllocator.DEFAULT.compositeBuffer();
   }
 
-  public void setInStream(FileInStream i) {
+  public void setInStream(FileInStreamWithCache i) {
     in = i;
 
   }
@@ -124,7 +124,7 @@ public class TempCacheUnit extends LinkNode<TempCacheUnit> implements CacheUnit 
           } else {
             needreadLen = (int)(end - pos);
           }
-          readLength = in.read(b, distPos, needreadLen);
+          readLength = in.innerRead(b, distPos, needreadLen);
         }
         // change read variable
         if(readLength != -1) {
@@ -136,13 +136,9 @@ public class TempCacheUnit extends LinkNode<TempCacheUnit> implements CacheUnit 
       return distPos - off;
     }
     else {
-      return in.read(b,off, leftToRead);
+      return in.innerRead(b,off, leftToRead);
     }
   }
-
-  public long getReadPos() {
-  	return in.mPosition;
-	}
 
   /**
    * Read from file or cache, cache data to cache List
@@ -150,7 +146,7 @@ public class TempCacheUnit extends LinkNode<TempCacheUnit> implements CacheUnit 
   public int lazyRead(byte[] b, int off, int len, long readPos)
 		throws IOException {
   	boolean positionedRead = false;
-  	if(readPos != in.mPosition) {
+  	if(readPos != in.getPos()) {
 			positionedRead = true;
 		}
 		long pos = readPos;
@@ -185,9 +181,9 @@ public class TempCacheUnit extends LinkNode<TempCacheUnit> implements CacheUnit 
 						needreadLen = (int) (end - pos);
 					}
 					if(!positionedRead) {
-						readLength = in.read(b, distPos, needreadLen);
+						readLength = in.innerRead(b, distPos, needreadLen);
 					} else {
-						readLength = in.positionedRead(pos, b, distPos, needreadLen );
+						readLength = in.innerPositionRead(pos, b, distPos, needreadLen );
 					}
 					if (readLength != -1) {
 						addCache(b, distPos, readLength);
@@ -205,9 +201,9 @@ public class TempCacheUnit extends LinkNode<TempCacheUnit> implements CacheUnit 
 		} else {
 			int readLength;
 			if(!positionedRead) {
-				readLength = in.read(b, off, leftToRead);
+				readLength = in.innerRead(b, off, leftToRead);
 			} else {
-				readLength = in.positionedRead(pos, b, off, leftToRead);
+				readLength = in.innerPositionRead(pos, b, off, leftToRead);
 			}
 			if (readLength > 0) {
 				addCache(b, off, readLength);

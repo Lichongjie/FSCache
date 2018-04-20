@@ -412,7 +412,7 @@ public class ClientCacheContext {
   public long computeIncrese(TempCacheUnit unit){
     long addSize = 0;
     CacheInternalUnit result = unit.convertType();
-    for(CacheInternalUnit tmp = unit.mBefore.after; tmp != null && tmp.after != unit.mAfter; tmp = tmp.after) {
+    for(CacheInternalUnit tmp = unit.mBefore.after ; tmp != null && tmp.after != unit.mAfter; tmp = tmp.after) {
       addSize -= tmp.getSize();
     }
     //printInfo(unit.mFileId);

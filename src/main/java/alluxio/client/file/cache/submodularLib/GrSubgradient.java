@@ -6,7 +6,7 @@ public class GrSubgradient extends Subgradient {
   public double b;
   public double mPrevGx ;
 
-  public GrSubgradient(double limit, SubmodularCalculator calculator, SubmodularSetUtils utils) {
+  public GrSubgradient(double limit, SubmodularCalculator calculator,SubmodularSetUtils utils) {
     super(calculator, utils);
     b = limit;
   }

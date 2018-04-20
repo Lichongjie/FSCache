@@ -7,7 +7,7 @@ import javafx.util.Pair;
 import java.util.*;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-public class DivideGR extends LRUPolicy {
+public class DivideGR extends LRUPolicy{
   public PriorityQueue<BaseCacheUnit> hitRatioQueue = new PriorityQueue<>(new Comparator<BaseCacheUnit>() {
     @Override
     public int compare(BaseCacheUnit o1, BaseCacheUnit o2) {
@@ -156,7 +156,7 @@ public class DivideGR extends LRUPolicy {
   	long delete = 0;
     while(mNeedDelete > 0) {
 			BaseCacheUnit baseUnit = hitRatioQueue.poll();
-			CacheInternalUnit unit = (CacheInternalUnit)ClientCacheContext.INSTANCE.
+			CacheInternalUnit unit = (CacheInternalUnit) ClientCacheContext.INSTANCE.
 				mFileIdToInternalList.get(baseUnit.getFileId()).getKeyFromBucket
 				(baseUnit.getBegin(), baseUnit.getEnd());
 			// change read lock to write lock

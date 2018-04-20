@@ -18,7 +18,7 @@ import alluxio.client.file.options.OutStreamOptions;
 
 import java.io.IOException;
 
-public class FileOutStreamWithCache extends FileOutStream{
+public class FileOutStreamWithCache extends FileOutStream {
   protected final ClientCacheContext mCacheContext;
 
   public FileOutStreamWithCache(AlluxioURI path, OutStreamOptions options, FileSystemContext
