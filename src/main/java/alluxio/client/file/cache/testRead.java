@@ -47,7 +47,7 @@ public class testRead {
 
     long begin = System.currentTimeMillis();
     AlluxioURI uri = new AlluxioURI("/testWriteBig");
-    FileSystem fs = FileSystem.Factory.get(true);
+    FileSystem fs = CacheFileSystem.get();
     FileInStream in = fs.openFile(uri);
 	//	((FileInStreamWithCache)in).mCachePolicy.mReadTime = 0;
 	//	ClientCacheContext.INSTANCE.readTime = 0;
@@ -66,15 +66,11 @@ public class testRead {
 		long end = System.currentTimeMillis();
 		long time = end - begin;
 		System.out.println(time);
-     System.out.println("search : " + (((FileInStreamWithCache)in)
-				 .mCacheContext.searchTime));
-    System.out.println("insert : " + ((FileInStreamWithCache)in).mCachePolicy
-			.mInsertTime);
-		System.out.println("read : " + ((FileInStreamWithCache)in).mCachePolicy
-			.mReadTime);
+     System.out.println("search : " + (((FileInStreamWithCache)in).mCacheContext.searchTime));
+    System.out.println("insert : " + ((FileInStreamWithCache)in).mCachePolicy.mInsertTime);
+		System.out.println("read : " + ((FileInStreamWithCache)in).mCachePolicy.mReadTime);
   }
-
-
+  
   public static void main(String[] args) throws Exception {
 	  //	readFirst
 	  //	writeToAlluxio("/usr/local/test.gz");

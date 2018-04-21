@@ -29,6 +29,10 @@ public class CacheFileSystem extends BaseFileSystem {
     return new CacheFileSystem(context, cacheContext);
   }
 
+  public static CacheFileSystem get(){
+    return get(FileSystemContext.INSTANCE, ClientCacheContext.INSTANCE);
+  }
+
   private CacheFileSystem(FileSystemContext context, ClientCacheContext cacheContext) {
     super(context);
     mCacheContext = cacheContext;
