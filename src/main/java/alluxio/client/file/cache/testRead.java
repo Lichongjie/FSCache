@@ -2,10 +2,7 @@ package alluxio.client.file.cache;
 
 import alluxio.AlluxioURI;
 import alluxio.Client;
-import alluxio.client.file.FileInStream;
-import alluxio.client.file.FileOutStream;
-import alluxio.client.file.FileSystem;
-import alluxio.client.file.URIStatus;
+import alluxio.client.file.*;
 import org.apache.commons.lang3.RandomUtils;
 import sun.awt.windows.ThemeReader;
 
@@ -88,14 +85,14 @@ public class testRead {
 	}
 
 	public static void readFirstTime(int l) throws Exception {
-
 		long begin = System.currentTimeMillis();
 		AlluxioURI uri = new AlluxioURI("/testWriteBig");
-		// FileSystem fs = CacheFileSystem.get();
-		FileSystem fs = FileSystem.Factory.get(true);
+		 FileSystem fs = CacheFileSystem.get();
+		//FileSystem fs = FileSystem.Factory.get(true);
 		FileInStream in = fs.openFile(uri);
 		//	((FileInStreamWithCache)in).mCachePolicy.mReadTime = 0;
 		//	ClientCacheContext.INSTANCE.readTime = 0;
+
 		byte[] b = new byte[l];
 		int read;
 		int ll = 0;
@@ -120,6 +117,7 @@ public class testRead {
 			System.out.println("read : " + ((FileInStreamWithCache)in).mCachePolicy
 				.mReadTime);
 	}
+
 
 
 
