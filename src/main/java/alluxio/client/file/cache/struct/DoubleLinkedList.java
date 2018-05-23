@@ -38,20 +38,20 @@ public class DoubleLinkedList<T extends LinkNode> implements Iterable  {
   }
 
   public void add(T node) {
-    if(head.after == null) {
-      head.after = node;
+		if(head.after == null) {
+			head.after = node;
       tail = node;
       node.before = head;
       node.after = null;
     } else {
-      node.before = tail;
+			node.before = tail;
       node.after = null;
       tail.after = node;
       tail = node;
     }
-    node.setLast();
+		node.setLast();
     size ++;
-  }
+	}
 
   /*
   public T insertBefore(T newUnit, T current) {
@@ -183,6 +183,16 @@ public class DoubleLinkedList<T extends LinkNode> implements Iterable  {
     }
     node.after = node.before = null;
   }
+
+  public void clear() {
+  	T node = head;
+  	while (node != null) {
+  		T tmp = node;
+  		node = (T)node.after;
+  		tmp.before = tmp.after = null;
+  		tmp = null;
+		}
+	}
 
   @Override
   public Iterator<T> iterator() {

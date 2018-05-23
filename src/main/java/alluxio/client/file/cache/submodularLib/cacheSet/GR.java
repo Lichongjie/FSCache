@@ -45,6 +45,14 @@ public class GR extends Subgradient<CacheUnit> {
 	}
 
 	@Override
+	public void clear() {
+		mCandidateSet.clear();
+		mCandidateSet = null;
+		mHitCalculator.clear();
+		System.gc();
+	}
+
+	@Override
 	public void iterateOptimize() {
 		mMaxSubgradient = 0;
 		CacheUnit result = null;
@@ -55,8 +63,6 @@ public class GR extends Subgradient<CacheUnit> {
 			CacheUnit j = iter.next();
       double tmpSubgradient = optimizeObject(j);
       if (iterateLimit(j)) {
-        // System.out.println("res " + new CacheSpaceCalculator().function(new CacheSetUtils().union(mChainSet, j)));
-        // System.out.println("res1 " + mHitCalculator.mSpaceSize);
         if (tmpSubgradient > mMaxSubgradient) {
 					mStopIterate = false;
 					mMaxSubgradient = tmpSubgradient;

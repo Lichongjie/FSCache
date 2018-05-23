@@ -19,6 +19,8 @@ public class CacheToolsTest {
   public static URIStatus status = new URIStatus(new FileInfo().setFileId(1).setLength(1000));
 
   private static class FakeFileInStream extends FileInStream {
+  	private long mPosition;
+  	private URIStatus mStatus;
     public FakeFileInStream() {
       mPosition = 0;
       mStatus = new URIStatus(new FileInfo().setFileId(1).setLength(100));
@@ -67,7 +69,8 @@ public class CacheToolsTest {
 
   public void readTest() throws IOException{
     byte[] b = new byte[100];
-    FileInStreamWithCache in = new FileInStreamWithCache(new FakeFileInStream(), ClientCacheContext.INSTANCE);
+    FileInStreamWithCache in = new FileInStreamWithCache(null,
+			ClientCacheContext.INSTANCE, null);
     in.read(b,0,10);
 
     in.skip(10);
@@ -87,7 +90,8 @@ public class CacheToolsTest {
 
     in.close();
 
-    in = new FileInStreamWithCache(new FakeFileInStream(), ClientCacheContext.INSTANCE);
+    in = new FileInStreamWithCache(null, ClientCacheContext
+			.INSTANCE, null);
     b = new byte[100];
     //in.skip(5);
     in.read(b, 0 ,100);

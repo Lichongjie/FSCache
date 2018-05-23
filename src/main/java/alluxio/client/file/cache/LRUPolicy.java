@@ -5,16 +5,21 @@ import java.util.LinkedList;
 import java.util.Set;
 
 public class LRUPolicy implements CachePolicy {
-	private LinkedList<CacheInternalUnit> mAccessRecords;
+	public LinkedList<CacheInternalUnit> mAccessRecords;
 	private Set<CacheUnit> mAccessSet;
 	protected long mCacheCapacity;
 	protected ClientCacheContext mContext;
 	protected long mCacheSize;
 	protected long mNeedDelete;
+	private PolicyName mPolicyName = PolicyName.LRU;
+
+	public PolicyName getPolicyName() {
+		return mPolicyName;
+	}
 
 	@Override
 	public boolean isSync() {
-		return false;
+		return true;
 	}
 
 	@Override
@@ -61,5 +66,11 @@ public class LRUPolicy implements CachePolicy {
 			deleteSize += delete;
 		}
 		return deleteSize;
+	}
+
+	@Override
+	public void clear() {
+
+
 	}
 }

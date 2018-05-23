@@ -4,7 +4,8 @@ import com.google.common.base.Preconditions;
 
 import java.util.Set;
 
-public abstract class Subgradient<T extends Element> extends IterateOptimizer {
+public abstract class Subgradient<T extends Element> extends
+	IterateOptimizer<T> {
 
  // public HashSet<Element> mResult = new HashSet<>();
   public Set<T> mChainSet;

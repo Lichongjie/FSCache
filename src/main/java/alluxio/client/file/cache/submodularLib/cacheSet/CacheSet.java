@@ -66,7 +66,6 @@ public class CacheSet implements Set<CacheUnit> {
 
   @Override
   public boolean contains(Object o) {
-    ClientCacheContext.INSTANCE.insertTime ++;
     if(o instanceof CacheUnit) {
       CacheUnit u = (CacheUnit)o;
       long fileId = u.getFileId();
@@ -125,10 +124,7 @@ public class CacheSet implements Set<CacheUnit> {
       cacheMap.put(fileId, set);
     }
     return true;
-
   }
-
-
 
 	@Override
   public boolean remove(Object o) {
@@ -168,11 +164,17 @@ public class CacheSet implements Set<CacheUnit> {
 
   @Override
   public void clear() {
-    cacheMap.clear();
+		for(Long l : cacheMap.keySet()) {
+			cacheMap.get(l).clear();
+		}
+		cacheMap.clear();
+		for(Long l : sortCacheMap.keySet()) {
+		  sortCacheMap.get(l).clear();
+		}
+		sortCacheMap.clear();
   }
 
   public CacheSet copy() {
-
     CacheSet res = new CacheSet();
     for(Map.Entry entry: cacheMap.entrySet()) {
       long fileId = (long)entry.getKey();

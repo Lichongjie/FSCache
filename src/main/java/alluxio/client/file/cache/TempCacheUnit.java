@@ -13,8 +13,10 @@ package alluxio.client.file.cache;
 
 import alluxio.client.file.cache.struct.LinkNode;
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.buffer.Unpooled;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.*;
 
@@ -28,15 +30,18 @@ public class TempCacheUnit extends LinkNode<TempCacheUnit> implements CacheUnit 
   CacheInternalUnit mBefore;
   CacheInternalUnit mAfter;
   public FileInStreamWithCache in;
-  private final long mSize;
+  private long mSize;
   private long mNewCacheSize;
-  public Set<Integer> lockedIndex = new LinkedHashSet<>();
+  private long mRealReadSize;
+  public List<Integer> lockedIndex = new LinkedList<>();
   public TreeSet<BaseCacheUnit> mTmpAccessRecord = new TreeSet<>(new Comparator<CacheUnit>() {
     @Override
     public int compare(CacheUnit o1, CacheUnit o2) {
       return (int)(o1.getBegin() - o2.getBegin());
     }
   });
+
+  public Queue<CacheInternalUnit> deleteQueue = new LinkedList<>();
 
   public long newSize;
 
@@ -48,6 +53,9 @@ public class TempCacheUnit extends LinkNode<TempCacheUnit> implements CacheUnit 
   	return mNewCacheSize;
 	}
 
+  public long getRealReadSize() {
+  	return mRealReadSize;
+	}
 
   @Override
   public long getFileId() {
@@ -58,6 +66,16 @@ public class TempCacheUnit extends LinkNode<TempCacheUnit> implements CacheUnit 
   public long getBegin() {
     return mBegin;
   }
+
+  public TempCacheUnit(){}
+
+	public void init(long begin, long end, long fileId) {
+		mBegin = begin;
+		mEnd = end;
+		mFileId = fileId;
+		mSize = mEnd - mBegin;
+		mNewCacheSize = 0;
+	}
 
   public TempCacheUnit(long begin, long end, long fileId) {
     mBegin = begin;
@@ -70,7 +88,6 @@ public class TempCacheUnit extends LinkNode<TempCacheUnit> implements CacheUnit 
 
   public void setInStream(FileInStreamWithCache i) {
     in = i;
-
   }
 
   public void resetEnd(long end) {
@@ -91,6 +108,7 @@ public class TempCacheUnit extends LinkNode<TempCacheUnit> implements CacheUnit 
     List<ByteBuf> tmp = unit.getAllData();
     mData.addAll(tmp);
     mTmpAccessRecord.addAll(unit.accessRecord);
+		deleteQueue.add(unit);
   }
 
 
@@ -101,6 +119,7 @@ public class TempCacheUnit extends LinkNode<TempCacheUnit> implements CacheUnit 
     long pos = mBegin;
     long end = Math.min(mEnd, mBegin + len);
     int leftToRead = (int)(end - mBegin);
+    mRealReadSize = leftToRead;
     int distPos = off;
     if(hasResource()) {
       CacheInternalUnit current = getResource();
@@ -145,13 +164,14 @@ public class TempCacheUnit extends LinkNode<TempCacheUnit> implements CacheUnit 
    */
   public int lazyRead(byte[] b, int off, int len, long readPos)
 		throws IOException {
-  	boolean positionedRead = false;
-  	if(readPos != in.getPos()) {
+		boolean positionedRead = false;
+		if (readPos != in.getPos()) {
 			positionedRead = true;
 		}
 		long pos = readPos;
 		long end = Math.min(mEnd, readPos + len);
 		int leftToRead = (int) (end - readPos);
+		mRealReadSize = leftToRead;
 		int distPos = off;
 		if (hasResource()) {
 			CacheInternalUnit current = getResource();
@@ -165,25 +185,27 @@ public class TempCacheUnit extends LinkNode<TempCacheUnit> implements CacheUnit 
 						in.skip(readLength);
 					}
 					consumeResource();
+
 					if (hasResource()) {
 						current = getResource();
 					} else {
 						beyondCacheList = true;
 						current = null;
 					}
+
 				}
 				//read from File, the need byte[] is before the current CacheUnit
 				else {
 					int needreadLen;
+					needreadLen = (int) (end - pos);
 					if (!beyondCacheList) {
-						needreadLen = (int) (current.getBegin() - pos);
-					} else {
-						needreadLen = (int) (end - pos);
+						needreadLen = Math.min((int) (current.getBegin() - pos),
+							needreadLen);
 					}
-					if(!positionedRead) {
+					if (!positionedRead) {
 						readLength = in.innerRead(b, distPos, needreadLen);
 					} else {
-						readLength = in.innerPositionRead(pos, b, distPos, needreadLen );
+						readLength = in.innerPositionRead(pos, b, distPos, needreadLen);
 					}
 					if (readLength != -1) {
 						addCache(b, distPos, readLength);
@@ -196,11 +218,12 @@ public class TempCacheUnit extends LinkNode<TempCacheUnit> implements CacheUnit 
 					distPos += readLength;
 					leftToRead -= readLength;
 				}
+
 			}
 			return distPos - off;
 		} else {
 			int readLength;
-			if(!positionedRead) {
+			if (!positionedRead) {
 				readLength = in.innerRead(b, off, leftToRead);
 			} else {
 				readLength = in.innerPositionRead(pos, b, off, leftToRead);
@@ -227,17 +250,23 @@ public class TempCacheUnit extends LinkNode<TempCacheUnit> implements CacheUnit 
     }
     mBefore = unit.before;
     mCacheConsumer.addFirst(unit);
-
   }
 
   public void addCache(byte[] b, int off, int len) {
     int cacheSize = ClientCacheContext.CACHE_SIZE;
     for(int i = off; i < len + off ; i += cacheSize ) {
       if (len + off - i > cacheSize) {
-        mData.add(Unpooled.wrappedBuffer(b, i, cacheSize));
+				ByteBuf tmp = PooledByteBufAllocator.DEFAULT.heapBuffer(cacheSize);
+        tmp.writeBytes(b,i,cacheSize);
+       // Unpooled.copiedBuffer()
+				//mData.add(Unpooled.copiedBuffer(b, i, cacheSize));
+				mData.add(tmp);
       } else {
-        mData.add(Unpooled.wrappedBuffer(b, i, len + off - i));
-      }
+				ByteBuf tmp = PooledByteBufAllocator.DEFAULT.heapBuffer(len + off - i);
+				tmp.writeBytes(b,i,len + off - i);
+        //mData.add(Unpooled.copiedBuffer(b, i, len + off - i));
+				mData.add(tmp);
+			}
     }
   }
 
@@ -250,16 +279,17 @@ public class TempCacheUnit extends LinkNode<TempCacheUnit> implements CacheUnit 
     while(!mCacheConsumer.isEmpty()) {
       consumeResource();
     }
-    // the tmp unit become cache unit to put into cache space, so, the data ref need
-    // to add 1;
-    for(ByteBuf buf : mData) {
-      buf.retain();
-    }
+
+		// the tmp unit become cache unit to put into cache space, so, the data ref need
+		// to add 1;
+		for(ByteBuf buf : mData) {
+			buf.retain();
+		}
+
     CacheInternalUnit result = new CacheInternalUnit(mBegin, mEnd,mFileId, mData);
     result.before = this.mBefore;
     result.after = this.mAfter;
     result.accessRecord.addAll(mTmpAccessRecord);
-
     return result;
   }
 
@@ -269,7 +299,7 @@ public class TempCacheUnit extends LinkNode<TempCacheUnit> implements CacheUnit 
   }
 
   public CacheInternalUnit getResource() {
-		return mCacheConsumer.poll();
+		return mCacheConsumer.peek();
   }
 
   public boolean hasResource() {

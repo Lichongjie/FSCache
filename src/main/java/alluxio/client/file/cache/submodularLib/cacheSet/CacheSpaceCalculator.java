@@ -32,7 +32,7 @@ public class CacheSpaceCalculator extends FunctionCalculator<CacheUnit> {
     for (Map.Entry entry : set.sortCacheMap.entrySet()) {
       res += function0((PriorityQueue<CacheUnit>) entry.getValue());
     }
-      return res;
+    return res;
 
   }
 

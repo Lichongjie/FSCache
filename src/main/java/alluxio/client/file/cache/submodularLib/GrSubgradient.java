@@ -11,6 +11,10 @@ public class GrSubgradient extends Subgradient {
     b = limit;
   }
 
+  public void clear() {
+
+	}
+
   @Override
   public void init() {
     super.init();

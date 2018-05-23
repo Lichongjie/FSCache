@@ -6,11 +6,9 @@ import alluxio.client.file.cache.submodularLib.cacheSet.CacheSet;
 import alluxio.client.file.cache.submodularLib.cacheSet.CacheSetUtils;
 import alluxio.client.file.cache.submodularLib.cacheSet.CacheSpaceCalculator;
 
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.Set;
+import java.util.*;
 
-public class ISK extends IterateOptimizer {
+public class ISK extends IterateOptimizer<CacheUnit> {
   public int iterNum = 0;
   private ISKSubgradient mSubgradient;
   private CacheSet tmpResult;
@@ -34,8 +32,8 @@ public class ISK extends IterateOptimizer {
 		iterNum = 0;
   }
 
-	public void addInputSpace(CacheSet input) {
-    mInputSpace = input;
+	public void addInputSpace(Set<CacheUnit> input) {
+    mInputSpace = (CacheSet)input;
   }
 
   @Override
@@ -57,11 +55,16 @@ public class ISK extends IterateOptimizer {
     mSubgradient.optimize();
     tmpResult = (CacheSet) mSubgradient.getResult();
 		mPreResult = tmpResult.copy();
+		mSubgradient.clear();
 		iterNum++;
    // System.out.println(iterNum + " : " + (System.currentTimeMillis() -
 		// begin) +" : " + mSubgradient.mHitCalculator.begin);
   }
 
+  @Override
+	public void clear() {
+
+	}
 
   public class ISKSubgradient extends Subgradient<CacheUnit> {
   	CacheHitCalculator mHitCalculator;
@@ -73,14 +76,14 @@ public class ISK extends IterateOptimizer {
   	Set<CacheUnit> mBaseSet;
   	double newSetVal;
   	double mIncrementSumTmp;
-  	long begin;
 
     public ISKSubgradient(long limit, CacheSetUtils utils) {
       super(null, utils);
       mHitCalculator = new CacheHitCalculator(utils);
       mSpaceCalculator = new CacheSpaceCalculator();
       mLimit = limit;
-    }
+			mIncrementMap = new HashMap<>();
+		}
 
     @Override
 		public void addInputSpace(Set<CacheUnit> input) {
@@ -107,16 +110,26 @@ public class ISK extends IterateOptimizer {
       mBaseSet = baseSet;
     }
 
+    public void clear() {
+			mBaseSet.clear();
+			mBaseSet	= null;
+			mCandidateSet.clear();
+			mCandidateSet = null;
+			mIncrementMap.clear();
+			mHitCalculator.clear();
+			System.gc();
+		}
+
     @Override
     public void init() {
-      super.init();
+			super.init();
 			mHitCalculator.init();
-      mChainSet = new CacheSet();
-      mBaseFx = mSpaceCalculator.function(mBaseSet);
+			mChainSet = new CacheSet();
+			mBaseFx = mSpaceCalculator.function(mBaseSet);
       Iterator<CacheUnit> iter = mBaseSet.iterator();
       mIncrementSum = 0;
       newSetVal = 0;
-      mIncrementMap = new HashMap<>();
+      mIncrementMap.clear();
       while (iter.hasNext()) {
         CacheUnit tmp = iter.next();
         mPreResult.remove(tmp);

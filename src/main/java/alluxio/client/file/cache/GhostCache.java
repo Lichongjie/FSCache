@@ -11,7 +11,7 @@ public enum GhostCache {
   private CacheHitCalculator mGhostCacheCalculator = new CacheHitCalculator(new CacheSetUtils());
   public double mGhostHit = 0.3;
 
-	public void add(BaseCacheUnit unit) {
+	public synchronized void add(BaseCacheUnit unit) {
 		mGhostCacheCalculator.add(unit);
 	}
 
@@ -23,6 +23,7 @@ public enum GhostCache {
 		Iterator<CacheUnit> iter = input.iterator();
 		double res = 0;
 		while (iter.hasNext()) {
+
 			CacheUnit unit = iter.next();
 			res += mGhostCacheCalculator.staticHitRatioFoGhost(unit);
 		}

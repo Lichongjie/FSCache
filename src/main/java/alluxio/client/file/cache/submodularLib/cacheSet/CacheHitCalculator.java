@@ -32,11 +32,9 @@ public class CacheHitCalculator extends FunctionCalculator<CacheUnit> {
 	}
 
 	public void backspace() {
-
 		if(mOldValue > 0 && mOldUnit != null) {
 			mHitRatioMap.get(mOldUnit.getFileId()).put(mOldUnit, mOldValue);
 		}
-
 		mOldValue = 0;
 		mOldUnit = null;
 		if(mComputeSpace) {
@@ -99,9 +97,25 @@ public class CacheHitCalculator extends FunctionCalculator<CacheUnit> {
 		mCurrentMaxSize = mCurrentIncreaseSize;
   }
 
+  public void clear() {
+		mSearchMarkMap.clear();
+		for(Long l : mSearchMarkMap.keySet()) {
+			Pair<BaseCacheUnit, BaseCacheUnit> p = mSearchMarkMap.get(l);
+			p = null;
+		}
+		mHitRatioMap.clear();
+		for(Long l : mHitRatioSortMap.keySet()) {
+			DoubleLinkedList<BaseCacheUnit> d = mHitRatioSortMap.get(l);
+			d.clear();
+		}
+		mHitRatioSortMap.clear();
+		if(spaceUtil != null)
+		  spaceUtil.clear();
+		spaceUtil = null;
+	}
+
 	public void addMaxBase(CacheUnit maxUnit) {
 		BaseCacheUnit tmp = mMaxUnit;
-
     long fileId = maxUnit.getFileId();
 		Map<CacheUnit, Double> tmpMap = mHitRatioMap.get(fileId);
 		boolean isInsert = false;
@@ -155,8 +169,16 @@ public class CacheHitCalculator extends FunctionCalculator<CacheUnit> {
 	}
 
 	public void init() {
+		for(Long l : mSearchMarkMap.keySet()) {
+			Pair<BaseCacheUnit, BaseCacheUnit> p = mSearchMarkMap.get(l);
+			p = null;
+		}
 		mSearchMarkMap.clear();
 		mHitRatioMap.clear();
+		for(Long l : mHitRatioSortMap.keySet()) {
+			DoubleLinkedList<BaseCacheUnit> d = mHitRatioSortMap.get(l);
+			d.clear();
+		}
 		mHitRatioSortMap.clear();
 		if(mComputeSpace) {
       initSpaceCalculate();
@@ -193,6 +215,7 @@ public class CacheHitCalculator extends FunctionCalculator<CacheUnit> {
 
 	private void changeSpaceSize(CacheUnit unit, BaseCacheUnit tmp) {
 	  if(mComputeSpace && !mSpaceIsComputed) {
+
       CacheUnit tmpunit = ClientCacheContext.INSTANCE.getKeyByReverse(tmp
 				.getBegin(), tmp.getEnd(), tmp.getFileId(), spaceIter, -1);
       if(!tmpunit.isFinish()) {
@@ -206,19 +229,12 @@ public class CacheHitCalculator extends FunctionCalculator<CacheUnit> {
     }
   }
 
-	private double statisticsHitRatio(CacheUnit unit) {
+	private synchronized double statisticsHitRatio(CacheUnit unit) {
 		double res = 0;
 		long fileId = unit.getFileId();
 		Map<CacheUnit, Double> tmpMap;
 		BaseCacheUnit mNextUnit = null;
 		if (!mHitRatioMap.containsKey(fileId)) {
-			/*
-			tmpMap = new TreeMap<>(new Comparator<CacheUnit>() {
-				@Override
-				public int compare(CacheUnit o1, CacheUnit o2) {
-					return (int) (o1.getBegin() - o2.getBegin());
-				}
-			});*/
 			tmpMap = new HashMap<>(3000);
 			DoubleLinkedList<BaseCacheUnit> list = new DoubleLinkedList<>(new BaseCacheUnit
 					(Long.MAX_VALUE, Long.MAX_VALUE, fileId));
@@ -291,19 +307,16 @@ public class CacheHitCalculator extends FunctionCalculator<CacheUnit> {
       pre = tmp;
 			tmp = tmp.after;
 		}
-
 		if(isNew) {
       mCurrentIncreaseSize = unit.getSize();
       mSpaceSize += mCurrentIncreaseSize;
     }
-
     if(newBegin) {
       if (!isNewFinish) {
         mCurrtentUnit = mNextUnit;
       }
 			mSearchMarkMap.put(fileId, new Pair<>(mCurrtentUnit, pre));
     }
-
 		return res;
 	}
 
@@ -333,28 +346,47 @@ public class CacheHitCalculator extends FunctionCalculator<CacheUnit> {
 	}
 
 	public void add(BaseCacheUnit unit) {
-  	long fileId = unit.getFileId();
+		long fileId = unit.getFileId();
 		DoubleLinkedList<BaseCacheUnit> list;
-		if (!mHitRatioMap.containsKey(fileId)) {
+		if (!mHitRatioSortMap.containsKey(fileId)) {
 			list = new DoubleLinkedList<>(new BaseCacheUnit
 				(Long.MAX_VALUE, Long.MAX_VALUE, fileId));
-			mHitRatioMap.put(fileId, new HashMap<>(3000));
+			list.add(unit);
+			mHitRatioMap.put(fileId, new HashMap<>());
 			mHitRatioSortMap.put(fileId, list);
 			markInit(fileId);
 		}
 		else {
-			list = mHitRatioSortMap.get(fileId);
+			try {
+				mHitRatioSortMap.get(fileId).add(unit);
+			} catch (Exception e) {
+				System.out.println(mHitRatioMap.containsKey(fileId) + " " +
+					mHitRatioSortMap.containsKey(fileId));
+       e.printStackTrace();
+			}
+
 		}
-		list.add(unit);
 	}
 
 	public double staticHitRatioFoGhost(CacheUnit unit) {
 		double res = 0;
 		long fileId = unit.getFileId();
 		BaseCacheUnit mNextUnit;
-		if(!mSearchMarkMap.containsKey(fileId)) {
+
+		Map<CacheUnit, Double> tmpMap;
+		if (!mHitRatioMap.containsKey(fileId)) {
+			tmpMap = new HashMap<>(3000);
+			DoubleLinkedList<BaseCacheUnit> list = new DoubleLinkedList<>(new BaseCacheUnit
+				(Long.MAX_VALUE, Long.MAX_VALUE, fileId));
+			mHitRatioMap.put(fileId, tmpMap);
+			mHitRatioSortMap.put(fileId, list);
 			markInit(fileId);
+		} else {
+			if(!mSearchMarkMap.containsKey(fileId)) {
+				markInit(fileId);
+			}
 		}
+
 		mCurrtentUnit = mSearchMarkMap.get(fileId).getFirst();
 		mNextUnit = mSearchMarkMap.get(fileId).getSecond();
 		BaseCacheUnit tmp;

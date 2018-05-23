@@ -12,9 +12,11 @@
 package alluxio.client.file.cache;
 
 import alluxio.client.file.cache.struct.LinkNode;
+import alluxio.client.file.cache.struct.LongPair;
 import com.google.common.base.Preconditions;
 import io.netty.buffer.ByteBuf;
-import javafx.util.Pair;
+import io.netty.buffer.PooledByteBufAllocator;
+import io.netty.util.ReferenceCountUtil;
 
 import java.util.*;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -34,7 +36,8 @@ public class CacheInternalUnit extends LinkNode<CacheInternalUnit> implements Ca
       return (int) (o1.getBegin() - o2.getBegin());
     }
 	}));
-	public volatile ReentrantReadWriteLock readLock;
+	public Queue<Set<BaseCacheUnit>> mTmpSplitQueue = null;
+	public volatile int readLock;
 
 
 	public int mBucketIndex = -1;
@@ -117,9 +120,6 @@ public class CacheInternalUnit extends LinkNode<CacheInternalUnit> implements Ca
    */
   public int positionedRead(byte[] b,int off, long begin, int len) {
     Preconditions.checkArgument(begin >= mBegin);
-    if(mData.size() == 0) {
-    	System.out.println(begin);
-		}
     Preconditions.checkArgument(mData.size() > 0);
     if(begin >= mEnd) {
       return -1;
@@ -212,14 +212,14 @@ public class CacheInternalUnit extends LinkNode<CacheInternalUnit> implements Ca
   		return -1;
 		}
 		else if(node.getEnd() <= this.mBegin) {
-			return 0;
+			return 1;
 		}
 		return 0;
   }
 
-  /**
+  /*
    * @return true if no data ref by other cache unit.
-   */
+
   public boolean clearData() {
     //this.before = this.after = null;
     boolean res = true;
@@ -232,7 +232,8 @@ public class CacheInternalUnit extends LinkNode<CacheInternalUnit> implements Ca
     }
     return res;
     //mData = null;
-  }
+  }*/
+
   private int deletePart(long begin, long newbegin, int lastRemain) {
     int i = 0;
     if(lastRemain > 0 && lastRemain <= newbegin - begin) {
@@ -314,16 +315,19 @@ public class CacheInternalUnit extends LinkNode<CacheInternalUnit> implements Ca
       //TODO add it to RBTree
 
 			bucket.add(newUnit);
+			if(mTmpSplitQueue != null) {
+				newUnit.accessRecord.addAll(mTmpSplitQueue.poll());
+			}
     }
   }
 
-  public void split(Queue<Pair<Long, Long>> tmpQueue, LinkedFileBucket bucket) {
+  public void split(Queue<LongPair> tmpQueue, LinkedFileBucket bucket) {
 		mDeleteCacheSize = 0;
     long lastEnd = mBegin;
     int lastByteRemain = 0;
 
     while(!tmpQueue.isEmpty()){
-      Pair<Long, Long> currentPart = tmpQueue.poll();
+			LongPair currentPart = tmpQueue.poll();
       long begin = currentPart.getKey();
       long end = currentPart.getValue();
       if(begin == mBegin && end == mEnd) return;
@@ -352,4 +356,11 @@ public class CacheInternalUnit extends LinkNode<CacheInternalUnit> implements Ca
   public void clearTreeIndex() {
     this.left = this.right = this.parent = null;
   }
+
+  public void clearData() {
+  	for(ByteBuf b :mData) {
+			ReferenceCountUtil.release(b);
+			b = null;
+  	}
+	}
 }

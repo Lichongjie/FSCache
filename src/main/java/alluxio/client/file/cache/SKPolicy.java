@@ -1,19 +1,24 @@
 package alluxio.client.file.cache;
 
+import alluxio.client.file.cache.RL.RLAgent;
 import alluxio.client.file.cache.submodularLib.ISK;
+import alluxio.client.file.cache.submodularLib.IterateOptimizer;
 import alluxio.client.file.cache.submodularLib.cacheSet.CacheSet;
 import alluxio.client.file.cache.submodularLib.cacheSet.CacheSetUtils;
+import alluxio.client.file.cache.submodularLib.cacheSet.GR;
 
+import java.net.ServerSocket;
 import java.util.Comparator;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-public class ISKPolicy implements CachePolicy, Runnable {
-	private CacheSet mInputSpace1;
-	private CacheSet mInputSpace2;
-	private volatile boolean useOne = true;
+public enum SKPolicy implements CachePolicy, Runnable {
+	INSTANCE;
+	public CacheSet mInputSpace1;
+	public CacheSet mInputSpace2;
+	public volatile boolean useOne = true;
 	private volatile boolean isEvicting = false;
 	private ClientCacheContext mContext;
 	private ClientCacheContext.LockManager mLockManager;
@@ -21,14 +26,38 @@ public class ISKPolicy implements CachePolicy, Runnable {
 	private long mCacheSize;
 	private double mLowWaterMark = 0.5;
 	private double mHighWaterMark= 0.75;
-	private ISK mOptimizer;
+	private IterateOptimizer mOptimizer;
 	private static long EVICT_THREAD_INTERNAL = 10;
 	private final Object mAccessLock = new Object();
 	private boolean useGhost;
 	private GhostCache mGhost = mContext.getGhostCache();
 	private CacheSet newAccessSpace = new CacheSet();
 	private ExecutorService mEvictPool = Executors.newSingleThreadExecutor();
-  private int evictContious = 0;
+  private static int evictContious = 0;
+  private boolean RL = false;
+  private RLAgent mRLAgent;
+
+  public static int testlock = 0;
+  private PolicyName mPolicyName;
+	private volatile boolean isEvictStart;
+
+	public void setPolicy(PolicyName name) {
+  	if(name == PolicyName.ISK) {
+			mOptimizer = null;
+			mOptimizer = new ISK((long) (mCacheCapacity * mLowWaterMark), new CacheSetUtils());
+			mPolicyName = PolicyName.ISK;
+		}
+		else if(name == PolicyName.GR) {
+			mOptimizer = null;
+			mOptimizer = new GR((long)(mCacheCapacity * mLowWaterMark), new CacheSetUtils());
+			mPolicyName = PolicyName.GR;
+		}
+	}
+
+	@Override
+	public PolicyName getPolicyName() {
+		return mPolicyName;
+	}
 
 	public void useGhost() {
 		mContext.mUseGhostCache = true;
@@ -53,8 +82,8 @@ public class ISKPolicy implements CachePolicy, Runnable {
   }
 
 	public long evict() {
-		System.out.println("evict begin " + mCacheSize + " " + mCacheCapacity + "" +
-			" " );
+		System.out.println("evict begin " + mCacheSize/(1024*1024) + " " +
+			mCacheCapacity/(1024*1024)  + " "  + Thread.currentThread().getId());
 		boolean evictInputSet = useOne;
     isEvicting = true;
 		synchronized (mAccessLock) {
@@ -66,7 +95,8 @@ public class ISKPolicy implements CachePolicy, Runnable {
       useOne = !useOne;
     }
 		mOptimizer.optimize();
-		CacheSet result = mOptimizer.getResult();
+		CacheSet result = (CacheSet)mOptimizer.getResult();
+		mOptimizer.clear();
 
 		long delete = 0;
     synchronized (mAccessLock) {
@@ -82,6 +112,7 @@ public class ISKPolicy implements CachePolicy, Runnable {
       if(useGhost) {
       	mGhost.clear();
 			}
+
 			for (long fileId : result.keySet()) {
         Set<CacheUnit> inputSet = result.get(fileId);
         delete += mContext.mFileIdToInternalList.get(fileId).elimiate
@@ -89,10 +120,9 @@ public class ISKPolicy implements CachePolicy, Runnable {
 			}
       mCacheSize -= delete;
       System.out.println("evict end " + mCacheSize);
-
 		}
     isEvicting = false;
-
+		testlock++;
 		return delete;
 	}
 
@@ -113,6 +143,7 @@ public class ISKPolicy implements CachePolicy, Runnable {
 					input = mInputSpace2;
 				}
 				double hitrate = mGhost.statisticsHitRatio(input);
+				//System.out.println(hitrate);
 				if ( (hitrate / (double)input.size()) >  mGhost.mGhostHit) {
           return true;
 				} else {
@@ -127,6 +158,7 @@ public class ISKPolicy implements CachePolicy, Runnable {
 	@Override
 	public void run() {
 		useGhost();
+		System.out.println("check thread " + Thread.currentThread().getId());
 		while (true) {
 			try {
 				if(evictCheck()) {
@@ -136,7 +168,11 @@ public class ISKPolicy implements CachePolicy, Runnable {
 							public void run() {
 								try {
 									evict();
-								} finally {
+								} catch (Exception e) {
+								  e.printStackTrace();
+								}
+								finally
+								{
 									if(mContext.mAllowCache == false) {
 										mContext.mAllowCache = true;
 									}
@@ -150,26 +186,33 @@ public class ISKPolicy implements CachePolicy, Runnable {
 						});
 					}
 				}
+
 				if(mCacheSize > mCacheCapacity || evictContious >= 2 ) {
 					if(mCacheSize > mCacheCapacity) {
-						mContext.mAllowCache = false;
+						//mContext.mAllowCache = false;
 					}
-					if(mHighWaterMark >= 0.9 || mLowWaterMark <= 0.1) {
+					if(mHighWaterMark >= 0.8|| mLowWaterMark <= 0.2) {
 						continue;
 					}
-					if(LowHitRatioCheck()) {
-						mLowWaterMark += 0.1;
-						if(mHighWaterMark - mLowWaterMark <= 0.2) {
-							mHighWaterMark += 0.1;
-						}
-					} else {
-            mHighWaterMark -= 0.1;
-						if(mHighWaterMark - mLowWaterMark <= 0.2) {
-							mLowWaterMark -= 0.1;
-						}
-					}
+
+					//if(LowHitRatioCheck()) {
+					//	mLowWaterMark += 0.1;
+					//	if(mHighWaterMark - mLowWaterMark <= 0.2) {
+					///		mHighWaterMark += 0.1;
+					//	}
+					//} else {
+           // mHighWaterMark -= 0.1;
+					//	if(mHighWaterMark - mLowWaterMark <= 0.2) {
+						//	mLowWaterMark -= 0.1;
+					//	}
+				//	}
+				//	System.out.println("===========" +mHighWaterMark+ " "
+					// +mLowWaterMark);
 				}
-			} finally {
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+			finally {
 				try {
 					Thread.sleep(EVICT_THREAD_INTERNAL);
 				} catch (InterruptedException e) {
@@ -196,23 +239,39 @@ public class ISKPolicy implements CachePolicy, Runnable {
 	}
 
 	public boolean isSync() {
-		return true;
+		return false;
 	}
 
+	@Override
 	public void init(long cacheSize, ClientCacheContext context) {
-
 		mCacheSize = 0 ;
 		mCacheCapacity = cacheSize;
 		mContext = context;
-		mOptimizer = new ISK((long)(mCacheCapacity * mLowWaterMark), new CacheSetUtils());
+		setPolicy(PolicyName.ISK);
 		mLockManager = mContext.getLockManager();
 		mInputSpace1 = new CacheSet();
 		mInputSpace2 = new CacheSet();
+
+		if(!isEvictStart) {
+			synchronized (this) {
+				if(!isEvictStart) {
+					mContext.COMPUTE_POOL.submit(this);
+					isEvictStart = true;
+				}
+			}
+		}
 	}
 
 	public void check(TempCacheUnit unit) {
 		mCacheSize += unit.getNewCacheSize();
+	  if(RL) {
+	  	mRLAgent.AddCurrentReword(unit.getRealReadSize(), unit.getNewCacheSize());
+		}
 	}
 
+	@Override
+	public void clear() {
+
+	}
 
 }

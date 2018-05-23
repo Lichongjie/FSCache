@@ -4,7 +4,6 @@ import java.util.Set;
 
 public abstract class SubmodularSetUtils<T extends Element> {
 
-
   public abstract Set<T> union(Set<T> set, T j);
 
   public abstract Set<T> subtract(Set<T> s1, Set<T> s2);

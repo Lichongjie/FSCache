@@ -2,6 +2,8 @@ package alluxio.client.file.cache;
 
 import alluxio.client.file.cache.struct.LinkNode;
 import alluxio.client.file.cache.struct.RBTree;
+import jdk.nashorn.internal.ir.UnaryNode;
+import org.omg.Messaging.SYNC_WITH_TRANSPORT;
 
 import java.util.Iterator;
 
@@ -38,15 +40,14 @@ public class LinkedFileBucket {
 
   public void add(CacheInternalUnit unit) {
 		int index = getIndex(unit.getBegin(), unit.getEnd());
-
     LinkBucket bucket = mCacheIndex0[index];
     unit.initBucketIndex(index);
-    if(bucket == null) {
+		if(bucket == null) {
       bucket = new RBTreeBucket(index);
       mCacheIndex0[index] =  bucket;
     }
     bucket.addNew(unit);
-  }
+	}
 
   public void delete(CacheInternalUnit unit) {
     int index = getIndex(unit.getBegin(), unit.getEnd());
@@ -73,8 +74,8 @@ public class LinkedFileBucket {
         }  else if (mCacheIndex0[right] != null && mCacheIndex0[right].mUnitNum > 0 ) {
 					CacheInternalUnit before = mCacheIndex0[right].mStart.before;
           Iterator<CacheInternalUnit> iter = new TmpIterator<>(mCacheIndex0[right].mStart, null);
-          CacheUnit unit =  ClientCacheContext.INSTANCE.getKey(begin, end,
-						mFileId,iter, right);
+          CacheUnit unit = ClientCacheContext.INSTANCE.getKey(begin, end,
+						mFileId, iter, right);
           if(unit.isFinish()) return unit;
 					TempCacheUnit tmp = (TempCacheUnit)unit;
 					if(before != null && tmp.getBegin() < before.getEnd()) {
@@ -108,6 +109,8 @@ public class LinkedFileBucket {
     }
   }
 
+
+
   /*
   private class SkipListBucket extends LinkBucket {
     SkipListBucket(long begin) {
@@ -131,8 +134,8 @@ public class LinkedFileBucket {
 
   }*/
 
-  private class RBTreeBucket extends  LinkBucket {
-    private RBTree<CacheInternalUnit> mCacheIndex1;
+  public class RBTreeBucket extends  LinkBucket {
+    public RBTree<CacheInternalUnit> mCacheIndex1;
     RBTreeBucket(int index) {
       super(index);
 			mCacheIndex1 = new RBTree<>();
@@ -142,26 +145,69 @@ public class LinkedFileBucket {
     public void convert(CacheInternalUnit unit, int num) {
       for(int i =0 ; i< num && unit != null; i ++) {
 				mCacheIndex1.insert(unit);
+				/*
+				if(!mCacheIndex1.judgeIfRing())
+					throw new RuntimeException();*/
         unit = unit.after;
       }
     }
+
+    private void test1(CacheInternalUnit unit) {
+    	if(test(unit) ) {
+    		System.out.println(unit);
+    		mCacheIndex1.print();
+    		throw new RuntimeException();
+			}
+		}
+
+    private boolean test(CacheInternalUnit unit) {
+			CacheInternalUnit x = (CacheInternalUnit)mCacheIndex1.mRoot;
+      long begin = unit.getBegin();
+      long end = unit.getEnd();
+			while (x != null) {
+				if (begin >= x.getBegin() && end <= x.getEnd()) {
+					return true;
+
+				} else if (begin >= x.getEnd()) {
+					if (x.right != null) {
+						x = x.right;
+					} else {
+						return false;
+
+					}
+				} else if (end <= x.getBegin()) {
+					if (x.left != null) {
+						x = x.left;
+					} else {
+						return false;
+
+					}
+				} else {
+					return false;
+
+				}
+			}
+			return false;
+		}
 
     @Override
     public void deleteInIndex(CacheInternalUnit unit) {
 			mCacheIndex1.remove(unit);
 			unit.clearTreeIndex();
+			test1(unit);
     }
 
     @Override
     public void addToIndex(CacheInternalUnit unit) {
       mCacheIndex1.insert(unit);
+			//if(!mCacheIndex1.judgeIfRing())
+			//	throw new RuntimeException();
     	//mCacheIndex1.findByIndex()
     }
 
     @Override
     public CacheUnit findByIndex(long begin, long end) {
       int index = getIndex(begin, end);
-
       return ClientCacheContext.INSTANCE.getKeyByTree(begin, end, mCacheIndex1, mFileId, index);
     }
 
@@ -172,7 +218,7 @@ public class LinkedFileBucket {
 
   }
 
-  private abstract class LinkBucket {
+  public abstract class LinkBucket {
     /** the begin of the first cache unit in this bucket. */
    // long mBegin;
     /** the begin side of unit in this bucket are small than mEnd. */
@@ -207,7 +253,6 @@ public class LinkedFileBucket {
 				return;
 			}
 			if(unit.equals(mStart)) {
-
 				if(mUnitNum > 1) {
 					mStart = mStart.after;
 				}
@@ -224,32 +269,32 @@ public class LinkedFileBucket {
 			}
 		}
 
-    public void delete(CacheInternalUnit unit) {
-      synchronized (this) {
-        deleteInBucket(unit);
-        mUnitNum--;
-        if (mConvertBefore) {
-          if (mIsRserveIndex) {
-            deleteInIndex(unit);
-          } else {
-            if (mUnitNum < CONVERT_LENGTH) {
-              clearIndex();
-              mConvertBefore = false;
-            } else {
-              deleteInIndex(unit);
-            }
-          }
-        }
-      }
+    public synchronized void delete(CacheInternalUnit unit) {
+			deleteInBucket(unit);
+			mUnitNum--;
+			if (mConvertBefore) {
+				if (mIsRserveIndex) {
+					deleteInIndex(unit);
+				} else {
+					if (mUnitNum < CONVERT_LENGTH) {
+						clearIndex();
+						mConvertBefore = false;
+					} else {
+						deleteInIndex(unit);
+					}
+				}
+			}
 		}
 
-    public void addNew(CacheInternalUnit unit) {
-      synchronized (this) {
-        //TODO add two level index
-        mUnitNum++;
+    public synchronized void addNew(CacheInternalUnit unit) {
+    	 //TODO judge adding lock or not, because add index will happened after
+			 // lock bucke index, so maybe no need to lock bucket.
+				mUnitNum++;
         if (mUnitNum == 1) {
           mStart = mEnd = unit;
-        } else {
+        } else if(mStart == null) {
+ 					mStart = unit;
+				}else {
           if (unit.getBegin() <= mStart.getBegin()) {
             mStart = unit;
           }
@@ -264,11 +309,10 @@ public class LinkedFileBucket {
         } else if (mConvertBefore) {
           addToIndex(unit);
         }
-      }
+
     }
 
     public CacheUnit find(long begin, long end) {
-			synchronized (this) {
         if (mUnitNum > CONVERT_LENGTH) {
           return findByIndex(begin, end);
         } else {
@@ -282,7 +326,6 @@ public class LinkedFileBucket {
             return ClientCacheContext.INSTANCE.getKey(begin, end, mFileId, iter, mIndex);
           }
         }
-      }
     }
   }
 

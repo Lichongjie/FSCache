@@ -13,12 +13,13 @@ package alluxio.client.file.cache.struct;
 
 public abstract class LinkNode<T extends LinkNode> {
    public T before = null;
-  public T after = null;
-  public T parent = null;
-  public  T left = null;
-  public T right = null;
+  public T  after = null;
+  public T  parent = null;
+  public  T  left = null;
+  public T  right = null;
    boolean isLast = false;
    boolean color;
+   boolean red;
 
 
   public void setLast() {

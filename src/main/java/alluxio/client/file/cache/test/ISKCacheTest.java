@@ -7,11 +7,12 @@ import alluxio.client.file.cache.struct.DoubleLinkedList;
 import alluxio.client.file.cache.submodularLib.ISK;
 import alluxio.client.file.cache.submodularLib.cacheSet.CacheSet;
 import alluxio.client.file.cache.submodularLib.cacheSet.CacheSpaceCalculator;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Random;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.util.*;
 
 public class ISKCacheTest {
   CacheSet input = new CacheSet();
@@ -87,7 +88,14 @@ public class ISKCacheTest {
     }
   }
 
-  public static void main(String [] args) {
-  	new ISKCacheTest().test();
-  }
+  public static void main(String [] args) throws Exception{
+  	byte[] tmp = new byte[10];
+  	byte[] original = new byte[10];
+  	byte[] newB = tmp;
+  	tmp[1] = 2;
+		FileOutputStream out = new FileOutputStream(new File(""));
+		out.write(tmp);
+  	ByteBuf b = Unpooled.wrappedBuffer(newB);
+  	System.out.println(b.getByte(1));
+	}
 }

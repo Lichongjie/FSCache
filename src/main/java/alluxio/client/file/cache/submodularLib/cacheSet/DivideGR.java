@@ -2,7 +2,7 @@ package alluxio.client.file.cache.submodularLib.cacheSet;
 
 import alluxio.client.file.cache.*;
 import alluxio.client.file.cache.struct.DoubleLinkedList;
-import javafx.util.Pair;
+import alluxio.client.file.cache.struct.LongPair;
 
 import java.util.*;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -15,6 +15,12 @@ public class DivideGR extends LRUPolicy{
     }
   });
   private ClientCacheContext.LockManager mLockManager;
+  private PolicyName mPolicyName = PolicyName.DIVIDE_GR;
+
+  @Override
+	public PolicyName getPolicyName() {
+		return mPolicyName;
+	}
 
   @Override
   public void init(long cacheSize, ClientCacheContext context) {
@@ -49,8 +55,10 @@ public class DivideGR extends LRUPolicy{
 
   public long deleteCache(CacheInternalUnit current) {
     FileCacheUnit unit1 = mContext.mFileIdToInternalList.get(current.getFileId());
-    Queue<Pair<Long, Long>> q = new LinkedList<>();
-    cacheCoinFiliter(current.accessRecord, q);
+    Queue<LongPair> q = new LinkedList<>();
+    Queue<Set<BaseCacheUnit>> splitQueue = new LinkedList<>();
+    cacheCoinFiliter(current.accessRecord, q, splitQueue);
+    current.mTmpSplitQueue = splitQueue;
     current.split(q, unit1.mBuckets);
 
     q.clear();
@@ -65,10 +73,12 @@ public class DivideGR extends LRUPolicy{
   }
 
   public void cacheCoinFiliter(Set<BaseCacheUnit> set,
-                               Queue<Pair<Long, Long>> tmpQueue ){
+                               Queue<LongPair> tmpQueue,
+	                             Queue<Set<BaseCacheUnit>> tmpQueue2) {
     long maxEnd = -1;
     long minBegin = -1;
     Iterator<BaseCacheUnit> iter = set.iterator();
+    Set<BaseCacheUnit> s = new HashSet<>();
     while(iter.hasNext()) {
       BaseCacheUnit tmpUnit = iter.next();
       if(minBegin == -1) {
@@ -79,14 +89,18 @@ public class DivideGR extends LRUPolicy{
           maxEnd = Math.max(tmpUnit.getEnd() , maxEnd);
         }
         else {
-          tmpQueue.add(new Pair<>(minBegin, maxEnd));
+          tmpQueue.add(new LongPair(minBegin, maxEnd));
+          tmpQueue2.add(s);
+          s = new HashSet<>();
           minBegin = tmpUnit.getBegin();
           maxEnd = tmpUnit.getEnd();
         }
       }
-    }
-    tmpQueue.add(new Pair<>(minBegin, maxEnd));
-  }
+			s.add(tmpUnit);
+		}
+    tmpQueue.add(new LongPair(minBegin, maxEnd));
+		tmpQueue2.add(s);
+	}
 
   private void addReCompute(CacheInternalUnit unit, BaseCacheUnit current) {
 
@@ -184,4 +198,9 @@ public class DivideGR extends LRUPolicy{
 		addReCompute(unit, current);
 		unit.accessRecord.add(current);
   }
+
+	@Override
+	public void clear() {
+
+	}
 }
