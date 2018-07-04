@@ -22,21 +22,21 @@ public class CacheSetUtils extends SubmodularSetUtils<CacheUnit> {
     CacheSet cacheMap = new CacheSet();
 
 
-    for (Map.Entry entry : ((CacheSet)set).cacheMap.entrySet()) {
-      long fileId = (long)entry.getKey();
-      Set<CacheUnit> tmpSet = (Set)entry.getValue();
-      cacheMap.put(fileId, (Set) (((TreeSet<CacheUnit>)tmpSet).clone()));
-      if(fileId == cacheUnit.getFileId() && !tmpSet.contains(cacheUnit)) {
+    for (Map.Entry entry : ((CacheSet) set).cacheMap.entrySet()) {
+      long fileId = (long) entry.getKey();
+      Set<CacheUnit> tmpSet = (Set) entry.getValue();
+      cacheMap.put(fileId, (Set) (((TreeSet<CacheUnit>) tmpSet).clone()));
+      if (fileId == cacheUnit.getFileId() && !tmpSet.contains(cacheUnit)) {
         cacheMap.get(fileId).add(cacheUnit);
       }
     }
-    if(!cacheMap.containsKey(cacheUnit.getFileId())) {
+    if (!cacheMap.containsKey(cacheUnit.getFileId())) {
       Set<CacheUnit> set1 = new TreeSet<>(new Comparator<CacheUnit>() {
-				@Override
-				public int compare(CacheUnit o1, CacheUnit o2) {
-					return (int)(o1.getBegin() - o2.getBegin());
-				}
-			});
+        @Override
+        public int compare(CacheUnit o1, CacheUnit o2) {
+          return (int) (o1.getBegin() - o2.getBegin());
+        }
+      });
       set1.add(cacheUnit);
       cacheMap.put(cacheUnit.getFileId(), set1);
     }
@@ -46,16 +46,16 @@ public class CacheSetUtils extends SubmodularSetUtils<CacheUnit> {
 
   private Set<CacheUnit> subtract0(Set<CacheUnit> s1, Set<CacheUnit> s2) {
     Set<CacheUnit> res = new TreeSet<>(new Comparator<CacheUnit>() {
-			@Override
-			public int compare(CacheUnit o1, CacheUnit o2) {
-				return (int)(o1.getBegin() - o2.getBegin());
-			}
-		});
-    if((s2 == null || s1 == null ) ||s2.isEmpty() || s1.isEmpty()) {
+      @Override
+      public int compare(CacheUnit o1, CacheUnit o2) {
+        return (int) (o1.getBegin() - o2.getBegin());
+      }
+    });
+    if ((s2 == null || s1 == null) || s2.isEmpty() || s1.isEmpty()) {
       return res;
     }
-    for(CacheUnit unit : s1) {
-      if(!s2.contains(unit)) {
+    for (CacheUnit unit : s1) {
+      if (!s2.contains(unit)) {
         res.add(unit);
       }
     }
@@ -68,16 +68,16 @@ public class CacheSetUtils extends SubmodularSetUtils<CacheUnit> {
     Preconditions.checkArgument(s1 instanceof CacheSet);
     Preconditions.checkArgument(s2 instanceof CacheSet);
     CacheSet res = new CacheSet();
-    if(s2.isEmpty() || s1.isEmpty()) {
+    if (s2.isEmpty() || s1.isEmpty()) {
       return s1;
     }
 
-    for (long fileId : ((CacheSet)s2).cacheMap.keySet()) {
+    for (long fileId : ((CacheSet) s2).cacheMap.keySet()) {
       Set<CacheUnit> set1 = subtract0(((CacheSet) s1).get(fileId), ((CacheSet) s2).get(fileId));
       res.put(fileId, set1);
     }
-    for(long fileId : ((CacheSet)s1).cacheMap.keySet()) {
-      if(!res.containsKey(fileId)) {
+    for (long fileId : ((CacheSet) s1).cacheMap.keySet()) {
+      if (!res.containsKey(fileId)) {
         res.put(fileId, ((CacheSet) s1).get(fileId));
       }
     }
@@ -88,7 +88,7 @@ public class CacheSetUtils extends SubmodularSetUtils<CacheUnit> {
   public Set<CacheUnit> subtract(Set<CacheUnit> set, CacheUnit cacheUnit) {
     Preconditions.checkArgument(set instanceof CacheSet);
 
-    CacheSet cacheMap = ((CacheSet)set).copy();
+    CacheSet cacheMap = ((CacheSet) set).copy();
     cacheMap.remove(cacheUnit);
     return cacheMap;
   }

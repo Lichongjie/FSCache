@@ -10,7 +10,7 @@ public abstract class IterateOptimizer<T extends Element> {
 
   public void optimize() {
     init();
-    while(!convergence()) {
+    while (!convergence()) {
       iterateOptimize();
     }
   }

@@ -5,9 +5,9 @@ import com.google.common.base.Preconditions;
 import java.util.Set;
 
 public abstract class Subgradient<T extends Element> extends
-	IterateOptimizer<T> {
+        IterateOptimizer<T> {
 
- // public HashSet<Element> mResult = new HashSet<>();
+  // public HashSet<Element> mResult = new HashSet<>();
   public Set<T> mChainSet;
   public Set<T> mCandidateSet;
   protected SubmodularCalculator<T> mCalculator;
@@ -53,11 +53,11 @@ public abstract class Subgradient<T extends Element> extends
     mMaxSubgradient = -1;
     T result = null;
     mStopIterate = true;
-    for(T j : mCandidateSet) {
-      if (iterateLimit(j)){
+    for (T j : mCandidateSet) {
+      if (iterateLimit(j)) {
         mStopIterate = false;
         double tmpSubgradient = optimizeObject(j);
-        if(tmpSubgradient > mMaxSubgradient) {
+        if (tmpSubgradient > mMaxSubgradient) {
           mMaxSubgradient = tmpSubgradient;
           result = j;
         }

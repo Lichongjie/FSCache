@@ -33,8 +33,8 @@ public class ISK extends IterateOptimizer<CacheUnit> {
   }
 
 
-	public void addInputSpace(Set<CacheUnit> input) {
-    mInputSpace = (CacheSet)input;
+  public void addInputSpace(Set<CacheUnit> input) {
+    mInputSpace = (CacheSet) input;
   }
 
   @Override
@@ -50,7 +50,7 @@ public class ISK extends IterateOptimizer<CacheUnit> {
   @Override
   public void iterateOptimize() {
     mIsConvergence = true;
-    long begin  = System.currentTimeMillis();
+    long begin = System.currentTimeMillis();
     mSubgradient.setBaseSet(tmpResult);
     mSubgradient.addInputSpace(mInputSpace.copy());
     mSubgradient.optimize();
@@ -85,9 +85,9 @@ public class ISK extends IterateOptimizer<CacheUnit> {
     }
 
     @Override
-		public void addInputSpace(Set<CacheUnit> input) {
-			mCandidateSet = input;
-		}
+    public void addInputSpace(Set<CacheUnit> input) {
+      mCandidateSet = input;
+    }
 
     @Override
     public boolean iterateLimit(CacheUnit j) {
@@ -98,7 +98,8 @@ public class ISK extends IterateOptimizer<CacheUnit> {
       } else {
         needAdd = newSetVal;
         needDelete -= mIncrementMap.get(j);
-      } if ((mBaseFx - needDelete + needAdd) <= mLimit) {
+      }
+      if ((mBaseFx - needDelete + needAdd) <= mLimit) {
         return true;
       }
       return false;
@@ -110,7 +111,7 @@ public class ISK extends IterateOptimizer<CacheUnit> {
 
     public void clear() {
       mBaseSet.clear();
-      mBaseSet	= null;
+      mBaseSet = null;
       mCandidateSet.clear();
       mCandidateSet = null;
       mIncrementMap.clear();
@@ -120,10 +121,10 @@ public class ISK extends IterateOptimizer<CacheUnit> {
 
     @Override
     public void init() {
-			super.init();
-			mHitCalculator.init();
-			mChainSet = new CacheSet();
-			mBaseFx = mSpaceCalculator.function(mBaseSet);
+      super.init();
+      mHitCalculator.init();
+      mChainSet = new CacheSet();
+      mBaseFx = mSpaceCalculator.function(mBaseSet);
       Iterator<CacheUnit> iter = mBaseSet.iterator();
       mIncrementSum = 0;
       newSetVal = 0;
@@ -158,8 +159,8 @@ public class ISK extends IterateOptimizer<CacheUnit> {
       mMaxSubgradient = 0;
       CacheUnit result = null;
       mStopIterate = true;
-			mHitCalculator.iterateInit();
-      Iterator<CacheUnit> iter = ((CacheSet)mCandidateSet).iterator();
+      mHitCalculator.iterateInit();
+      Iterator<CacheUnit> iter = ((CacheSet) mCandidateSet).iterator();
       while (iter.hasNext()) {
         CacheUnit j = iter.next();
         if (iterateLimit(j)) {
@@ -172,7 +173,8 @@ public class ISK extends IterateOptimizer<CacheUnit> {
           }
           mHitCalculator.backspace();
         }
-      } if (result != null) {
+      }
+      if (result != null) {
         if (!mPreResult.contains(result)) {
           mIsConvergence = false;
         }
@@ -183,7 +185,7 @@ public class ISK extends IterateOptimizer<CacheUnit> {
           mIncrementSum -= mIncrementMap.get(result);
         }
         (mCandidateSet).remove(result);
-        if(!mStopIterate) {
+        if (!mStopIterate) {
           mHitCalculator.addMaxBase(result);
         }
       }

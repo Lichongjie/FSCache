@@ -7,78 +7,78 @@ import java.util.Iterator;
 import java.util.Set;
 
 public class GR extends Subgradient<CacheUnit> {
-	CacheHitCalculator mHitCalculator;
-	CacheSpaceCalculator mSpaceCalculator;
-	double mLimit;
+  CacheHitCalculator mHitCalculator;
+  CacheSpaceCalculator mSpaceCalculator;
+  double mLimit;
 
-	public GR(long limit, CacheSetUtils utils) {
-		super(null, utils);
-		mHitCalculator = new CacheHitCalculator(utils);
-		mSpaceCalculator = new CacheSpaceCalculator();
+  public GR(long limit, CacheSetUtils utils) {
+    super(null, utils);
+    mHitCalculator = new CacheHitCalculator(utils);
+    mSpaceCalculator = new CacheSpaceCalculator();
     mLimit = limit;
-	}
+  }
 
-	@Override
-	public void addInputSpace(Set<CacheUnit> input) {
-		mCandidateSet = input;
-	}
+  @Override
+  public void addInputSpace(Set<CacheUnit> input) {
+    mCandidateSet = input;
+  }
 
-	@Override
-	public boolean iterateLimit(CacheUnit j) {
-		if (mHitCalculator.mSpaceSize <= mLimit) {
-			return true;
-		}
-		return false;
-	}
+  @Override
+  public boolean iterateLimit(CacheUnit j) {
+    if (mHitCalculator.mSpaceSize <= mLimit) {
+      return true;
+    }
+    return false;
+  }
 
-	@Override
-	public void init() {
-		super.init();
+  @Override
+  public void init() {
+    super.init();
     mHitCalculator.mComputeSpace = true;
     mHitCalculator.init();
-		mChainSet = new CacheSet();
-	}
+    mChainSet = new CacheSet();
+  }
 
-	@Override
-	public double optimizeObject(CacheUnit j) {
-		return mHitCalculator.function(j) ;
-	}
+  @Override
+  public double optimizeObject(CacheUnit j) {
+    return mHitCalculator.function(j);
+  }
 
-	@Override
-	public void clear() {
-		mCandidateSet.clear();
-		mCandidateSet = null;
-		mHitCalculator.clear();
-		System.gc();
-	}
+  @Override
+  public void clear() {
+    mCandidateSet.clear();
+    mCandidateSet = null;
+    mHitCalculator.clear();
+    System.gc();
+  }
 
-	@Override
-	public void iterateOptimize() {
-		mMaxSubgradient = 0;
-		CacheUnit result = null;
-		mStopIterate = true;
-		mHitCalculator.iterateInit();
-		Iterator<CacheUnit> iter = ((CacheSet)mCandidateSet).iterator();
-		while (iter.hasNext()) {
-			CacheUnit j = iter.next();
+  @Override
+  public void iterateOptimize() {
+    mMaxSubgradient = 0;
+    CacheUnit result = null;
+    mStopIterate = true;
+    mHitCalculator.iterateInit();
+    Iterator<CacheUnit> iter = ((CacheSet) mCandidateSet).iterator();
+    while (iter.hasNext()) {
+      CacheUnit j = iter.next();
       double tmpSubgradient = optimizeObject(j);
       if (iterateLimit(j)) {
         if (tmpSubgradient > mMaxSubgradient) {
-					mStopIterate = false;
-					mMaxSubgradient = tmpSubgradient;
-					result = j;
-					mHitCalculator.setMaxMark();
+          mStopIterate = false;
+          mMaxSubgradient = tmpSubgradient;
+          result = j;
+          mHitCalculator.setMaxMark();
         }
-			}
+      }
       mHitCalculator.backspace();
     }
-		if (result != null) {
-			mChainSet.add(result);
+    if (result != null) {
+      mChainSet.add(result);
       mCandidateSet.remove(result);
-			if(!mStopIterate) {
+      if (!mStopIterate) {
         mHitCalculator.addMaxBase(result);
-			}
-		}
-	}
+      }
+    }
+  }
 }
 
