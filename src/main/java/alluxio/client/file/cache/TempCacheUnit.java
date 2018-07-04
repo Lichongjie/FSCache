@@ -11,6 +11,8 @@
 
 package alluxio.client.file.cache;
 
+import alluxio.Client;
+import alluxio.client.file.FileInStream;
 import alluxio.client.file.cache.struct.LinkNode;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
@@ -70,11 +72,11 @@ public class TempCacheUnit extends LinkNode<TempCacheUnit> implements CacheUnit 
   public TempCacheUnit(){}
 
 	public void init(long begin, long end, long fileId) {
-		mBegin = begin;
-		mEnd = end;
-		mFileId = fileId;
-		mSize = mEnd - mBegin;
-		mNewCacheSize = 0;
+    mBegin = begin;
+    mEnd = end;
+    mFileId = fileId;
+    mSize = mEnd - mBegin;
+    mNewCacheSize = 0;
 	}
 
   public TempCacheUnit(long begin, long end, long fileId) {
@@ -102,15 +104,16 @@ public class TempCacheUnit extends LinkNode<TempCacheUnit> implements CacheUnit 
     return mEnd;
   }
 
-  public void consumeResource() {
-		CacheInternalUnit unit = mCacheConsumer.poll();
-    // (TODO) maybe cause array copy
-    List<ByteBuf> tmp = unit.getAllData();
-    mData.addAll(tmp);
-    mTmpAccessRecord.addAll(unit.accessRecord);
-		deleteQueue.add(unit);
+  public void consumeResource(boolean isCache) {
+    CacheInternalUnit unit = mCacheConsumer.poll();
+     // (TODO) maybe cause array copy
+    if(isCache) {
+      List<ByteBuf> tmp = unit.getAllData();
+      mData.addAll(tmp);
+      mTmpAccessRecord.addAll(unit.accessRecord);
+      deleteQueue.add(unit);
+    }
   }
-
 
   /**
    * Read from file or cache, don't cache read data to cache List
@@ -162,78 +165,77 @@ public class TempCacheUnit extends LinkNode<TempCacheUnit> implements CacheUnit 
   /**
    * Read from file or cache, cache data to cache List
    */
-  public int lazyRead(byte[] b, int off, int len, long readPos)
-		throws IOException {
-		boolean positionedRead = false;
-		if (readPos != in.getPos()) {
-			positionedRead = true;
-		}
-		long pos = readPos;
-		long end = Math.min(mEnd, readPos + len);
-		int leftToRead = (int) (end - readPos);
-		mRealReadSize = leftToRead;
-		int distPos = off;
-		if (hasResource()) {
-			CacheInternalUnit current = getResource();
-			boolean beyondCacheList = false;
-			int readLength = -1;
-			while (pos < end) {
-				//read from cache
-				if (current != null && pos >= current.getBegin()) {
-					readLength = current.positionedRead(b, distPos, pos, leftToRead);
-					if (readLength != -1 && !positionedRead) {
-						in.skip(readLength);
-					}
-					consumeResource();
+  public int lazyRead(byte[] b, int off, int len, long readPos, boolean isCache)
+    throws IOException {
+    boolean positionedRead = false;
+    if (readPos != in.getPos()) {
+      positionedRead = true;
+    }
+    long pos = readPos;
+    long end = Math.min(mEnd, readPos + len);
+    int leftToRead = (int) (end - readPos);
+    mRealReadSize = leftToRead;
+    int distPos = off;
+    if (hasResource()) {
+      CacheInternalUnit current = getResource();
+      boolean beyondCacheList = false;
+      int readLength = -1;
+      while (pos < end) {
+      //read from cache
+        if (current != null && pos >= current.getBegin()) {
+          readLength = current.positionedRead(b, distPos, pos, leftToRead);
+          if (readLength != -1 && !positionedRead) {
+          	in.skip(readLength);
+          }
+          consumeResource(isCache);
 
-					if (hasResource()) {
-						current = getResource();
-					} else {
-						beyondCacheList = true;
-						current = null;
-					}
-
-				}
-				//read from File, the need byte[] is before the current CacheUnit
-				else {
-					int needreadLen;
-					needreadLen = (int) (end - pos);
-					if (!beyondCacheList) {
-						needreadLen = Math.min((int) (current.getBegin() - pos),
+          if (hasResource()) {
+            current = getResource();
+          } else {
+            beyondCacheList = true;
+            current = null;
+          }
+        }
+        //read from File, the need byte[] is before the current CacheUnit
+        else {
+          int needreadLen;
+          needreadLen = (int) (end - pos);
+          if (!beyondCacheList) {
+            needreadLen = Math.min((int) (current.getBegin() - pos),
 							needreadLen);
-					}
-					if (!positionedRead) {
-						readLength = in.innerRead(b, distPos, needreadLen);
-					} else {
-						readLength = in.innerPositionRead(pos, b, distPos, needreadLen);
-					}
-					if (readLength != -1) {
-						addCache(b, distPos, readLength);
-						mNewCacheSize += readLength;
-					}
-				}
-				// change read variable
-				if (readLength != -1) {
-					pos += readLength;
-					distPos += readLength;
-					leftToRead -= readLength;
-				}
+          }
+          if (!positionedRead) {
+            readLength = in.innerRead(b, distPos, needreadLen);
+          } else {
+            readLength = in.innerPositionRead(pos, b, distPos, needreadLen);
+          }
 
-			}
-			return distPos - off;
-		} else {
-			int readLength;
-			if (!positionedRead) {
-				readLength = in.innerRead(b, off, leftToRead);
-			} else {
-				readLength = in.innerPositionRead(pos, b, off, leftToRead);
-			}
-			if (readLength > 0) {
-				addCache(b, off, readLength);
-				mNewCacheSize += readLength;
-			}
-			return readLength;
-		}
+          if (readLength != -1 && isCache) {
+            addCache(b, distPos, readLength);
+            mNewCacheSize += readLength;
+          }
+        }
+        // change read variable
+        if (readLength != -1) {
+          pos += readLength;
+          distPos += readLength;
+          leftToRead -= readLength;
+        }
+      }
+      return distPos - off;
+    } else {
+      int readLength;
+      if (!positionedRead) {
+        readLength = in.innerRead(b, off, leftToRead);
+      } else {
+        readLength = in.innerPositionRead(pos, b, off, leftToRead);
+      }
+      if (readLength > 0 && isCache) {
+        addCache(b, off, readLength);
+        mNewCacheSize += readLength;
+      }
+      return readLength;
+    }
   }
 
   public void addResource(CacheInternalUnit unit) {
@@ -252,22 +254,90 @@ public class TempCacheUnit extends LinkNode<TempCacheUnit> implements CacheUnit 
     mCacheConsumer.addFirst(unit);
   }
 
+  public int addCache(FileInStreamWithCache in, int off, int len) throws IOException{
+    int cacheSize = ClientCacheContext.CACHE_SIZE;
+    int readLen = 0;
+    for(int i = off; i < len + off ; i += cacheSize ) {
+      if (len + off - i > cacheSize) {
+        ByteBuf tmp = PooledByteBufAllocator.DEFAULT.heapBuffer(cacheSize);
+        byte[] b = tmp.array();
+        readLen += in.innerPositionRead(off, b, 0, b.length);
+        mData.add(tmp);
+      } else {
+        ByteBuf tmp = PooledByteBufAllocator.DEFAULT.heapBuffer(len + off - i);
+        byte[] b = tmp.array();
+        readLen += in.innerPositionRead(off, b, 0, b.length);
+        mData.add(tmp);
+      }
+    }
+    return readLen;
+  }
+
+  public int cache(long pos, int len) throws IOException {
+    long end = Math.min(mEnd, pos + len);
+    int leftToRead = (int) (end - pos);
+    mRealReadSize = leftToRead;
+    if (hasResource()) {
+      CacheInternalUnit current = getResource();
+      boolean beyondCacheList = false;
+      int readLength = -1;
+      while (pos < end) {
+        //read from cache
+        if (current != null && pos >= current.getBegin()) {
+          readLength = Math.min((int)current.getSize(), leftToRead);
+          consumeResource(true);
+          if (hasResource()) {
+            current = getResource();
+          } else {
+            beyondCacheList = true;
+            current = null;
+          }
+        }
+        else {
+          int needreadLen = (int) (end - pos);
+          if (!beyondCacheList) {
+            needreadLen = Math.min((int) (current.getBegin() - pos),
+                    needreadLen);
+          }
+          readLength = addCache(in, (int)pos, needreadLen);
+          if (readLength != -1 ) {
+            mNewCacheSize += readLength;
+          }
+        }
+        // change read variable
+        if (readLength != -1) {
+          pos += readLength;
+          leftToRead -= readLength;
+        }
+      }
+      return (int)mNewCacheSize;
+    } else {
+      int readLength = addCache(in, (int)pos, leftToRead);
+      if (readLength != -1 ) {
+        mNewCacheSize += readLength;
+      }
+      return (int)mNewCacheSize;
+    }
+  }
+
   public void addCache(byte[] b, int off, int len) {
+    long begin = System.currentTimeMillis();
     int cacheSize = ClientCacheContext.CACHE_SIZE;
     for(int i = off; i < len + off ; i += cacheSize ) {
       if (len + off - i > cacheSize) {
-				ByteBuf tmp = PooledByteBufAllocator.DEFAULT.heapBuffer(cacheSize);
+			  ByteBuf tmp = PooledByteBufAllocator.DEFAULT.heapBuffer(cacheSize);
         tmp.writeBytes(b,i,cacheSize);
-       // Unpooled.copiedBuffer()
+        // Unpooled.copiedBuffer()
 				//mData.add(Unpooled.copiedBuffer(b, i, cacheSize));
 				mData.add(tmp);
       } else {
-				ByteBuf tmp = PooledByteBufAllocator.DEFAULT.heapBuffer(len + off - i);
-				tmp.writeBytes(b,i,len + off - i);
+			  ByteBuf tmp = PooledByteBufAllocator.DEFAULT.heapBuffer(len + off - i);
+        tmp.writeBytes(b,i,len + off - i);
         //mData.add(Unpooled.copiedBuffer(b, i, len + off - i));
-				mData.add(tmp);
-			}
+        mData.add(tmp);
+      }
     }
+    ClientCacheContext.testTime2 += System.currentTimeMillis() - begin;
   }
 
   /**
@@ -277,7 +347,7 @@ public class TempCacheUnit extends LinkNode<TempCacheUnit> implements CacheUnit 
    */
   public CacheInternalUnit convert() {
     while(!mCacheConsumer.isEmpty()) {
-      consumeResource();
+      consumeResource(true);
     }
 
 		// the tmp unit become cache unit to put into cache space, so, the data ref need

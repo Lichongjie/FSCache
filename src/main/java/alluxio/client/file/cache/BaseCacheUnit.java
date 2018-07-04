@@ -14,7 +14,6 @@ public class BaseCacheUnit extends LinkNode<BaseCacheUnit> implements CacheUnit 
     currentHitVal = 1;
     mPureIncrease = 0;
   }
-
   public long getPureIncrease() {
     return mPureIncrease;
   }
@@ -58,35 +57,29 @@ public class BaseCacheUnit extends LinkNode<BaseCacheUnit> implements CacheUnit 
 
 
   public boolean isCoincience(CacheUnit u2) {
-		long begin = System.currentTimeMillis();
-		try {
-
-			if (getFileId() != u2.getFileId()) {
-				return false;
-			}
-			if (mBegin == u2.getBegin() && mEnd == u2.getEnd()) {
-				return false;
-			}
-			if (mBegin <= u2.getBegin() && mEnd > u2.getBegin()) {
-				return true;
-			}
-			if (mBegin < u2.getEnd()) {
-				return true;
-			}
+    long begin = System.currentTimeMillis();
+    try {
+      if (getFileId() != u2.getFileId()) {
+        return false;
+      } if (mBegin == u2.getBegin() && mEnd == u2.getEnd()) {
+        return false;
+      } if (mBegin <= u2.getBegin() && mEnd > u2.getBegin()) {
+        return true;
+      } if (mBegin < u2.getEnd()) {
+        return true;
+      }
 			return false;
-		} finally  {
+    } finally  {
 		//	ClientCacheContext.INSTANCE.compute += System.currentTimeMillis() -
 			// begin;
 		}
-
 	}
 
-	@Override
-	public String toString() {
-		return "empty unit begin: " + mBegin + "end: " + mEnd ;
-	}
-
-	public int compareTo(BaseCacheUnit node) {
-		return 0;
-	}
+  @Override
+  public String toString() {
+    return "empty unit begin: " + mBegin + "end: " + mEnd ;
+  }
+  public int compareTo(BaseCacheUnit node) {
+    return 0;
+  }
 }

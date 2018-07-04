@@ -11,10 +11,14 @@
 
 package alluxio.client.file.cache;
 
+import alluxio.AlluxioURI;
+import alluxio.client.file.FileInStream;
+import alluxio.client.file.FileSystem;
 import alluxio.client.file.cache.struct.DoubleLinkedList;
 import alluxio.client.file.cache.struct.LongPair;
-import alluxio.client.file.cache.struct.RBTree;
+import alluxio.exception.AlluxioException;
 
+import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -50,17 +54,12 @@ public class FileCacheUnit {
 		return mBuckets.find(begin, end);
   }
 
-  public void testIndex(int index) {
-		((LinkedFileBucket.RBTreeBucket)mBuckets.mCacheIndex0[index]).mCacheIndex1.print();
-	}
-
   public void cacheCoinFiliter(PriorityQueue<LongPair> queue,
                                Queue<LongPair> tmpQueue ){
     long maxEnd = -1;
     long minBegin = -1;
     while(!queue.isEmpty()) {
 			LongPair tmpUnit = queue.poll();
-
       if(minBegin == -1) {
         minBegin = tmpUnit.getKey();
         maxEnd = tmpUnit.getValue();
@@ -78,108 +77,169 @@ public class FileCacheUnit {
     tmpQueue.add(new LongPair(minBegin, maxEnd));
   }
 
+  public void cacheCoinFiliter(Queue<CacheUnit> queue,
+                               Queue<LongPair> tmpQueue ){
+    long maxEnd = -1;
+    long minBegin = -1;
+    while(!queue.isEmpty()) {
+      CacheUnit tmpUnit = queue.poll();
+      if(minBegin == -1) {
+        minBegin = tmpUnit.getBegin();
+        maxEnd = tmpUnit.getEnd();
+      } else {
+        if(tmpUnit.getBegin() <= maxEnd) {
+          maxEnd = Math.max(tmpUnit.getEnd() , maxEnd);
+        }
+        else {
+          tmpQueue.add(new LongPair(minBegin, maxEnd));
+          minBegin = tmpUnit.getBegin();
+          maxEnd = tmpUnit.getEnd();
+        }
+      }
+    }
+    tmpQueue.add(new LongPair(minBegin, maxEnd));
+  }
+
+
+  /**
+   * Return the new Cache size promoted from under_fs
+   */
+  public long merge(AlluxioURI uri, PriorityQueue<CacheUnit> queue)
+          throws IOException, AlluxioException {
+    Iterator<CacheInternalUnit> iterator = cacheList.iterator();
+    FileSystem fs = FileSystem.Factory.get(true);
+    FileInStream in = fs.openFile(uri);
+    Set<CacheInternalUnit> needDeleteSet = new LinkedHashSet<>();
+    while (iterator.hasNext()) {
+      CacheInternalUnit tmp = iterator.next();
+      queue.add(tmp);
+      needDeleteSet.add(tmp);
+    }
+    Queue<LongPair> tmpQueue = new LinkedBlockingQueue<>();
+    cacheCoinFiliter(queue, tmpQueue);
+    long newSize = 0;
+    while (!tmpQueue.isEmpty()) {
+      LongPair l = tmpQueue.poll();
+      CacheUnit newUnit = getKeyFromBucket(l.getKey(), l.getValue());
+      if(newUnit instanceof TempCacheUnit) {
+        TempCacheUnit tmpUnit = (TempCacheUnit)newUnit;
+        for(CacheInternalUnit unit : tmpUnit.mCacheConsumer) {
+          needDeleteSet.remove(unit);
+        }
+        tmpUnit.setInStream((FileInStreamWithCache)in);
+        int len = (int)(l.getValue() - l.getKey());
+        int res = mContext.getCacheManager().cache(tmpUnit, l.getKey(), len);
+        if (res != len) {
+          // the end of file
+          tmpUnit.resetEnd((int) mLength);
+        }
+        newSize += res;
+      }
+    }
+    for(CacheInternalUnit current : needDeleteSet) {
+      List<ReentrantReadWriteLock> writeLocks = mLockManager.deleteLock(current);
+      try {
+        mBuckets.delete(current);
+        cacheList.delete(current);
+        current.clearData();
+        newSize -= current.getSize();
+      } finally {
+        if( writeLocks != null) {
+          for(ReentrantReadWriteLock w : writeLocks) {
+            w.writeLock().unlock();
+          }
+        }
+      }
+    }
+    return newSize;
+  }
+
 
   public long elimiate(Set<CacheUnit> input) {
-  	long deleteSizeSum = 0;
-		HashMap<CacheUnit, PriorityQueue<LongPair>> tmpMap = new HashMap<>();
-
-		for(CacheUnit unit : input) {
-			CacheInternalUnit cache = null;
-			int index = mBuckets.getIndex(unit.getBegin(), unit.getEnd());
-			//ReentrantReadWriteLock l = mLockManager.getLock(mFileId, index);
-
-			//if(l.isWriteLocked()) {
-			//	System.out.println("dead lock !!!!!!!!!! " );
-			//	System.out.println(unit + " " + l.isWriteLockedByCurrentThread());
-			//}
-			try {
-				cache = (CacheInternalUnit) getKeyFromBucket(unit.getBegin(), unit.getEnd());
-			  mLockManager.readUnlock(cache.getFileId(), cache.readLock);
-
-				if(!tmpMap.containsKey(cache)) {
-        PriorityQueue<LongPair> queue = new PriorityQueue<>(new Comparator<LongPair>() {
-          @Override
-          public int compare(LongPair o1, LongPair o2) {
-            return (int)(o1.getKey() - o2.getKey());
-          }
-        });
-					LongPair p = new LongPair(unit.getBegin(), unit.getEnd());
-					queue.add(p);
-					tmpMap.put(cache, queue);
-				}
-        else {
-					tmpMap.get(cache).add(new LongPair(unit.getBegin(), unit.getEnd()));
-				}
-			}catch (Exception e) {
-				e.printStackTrace();
-			}
-		}
-
-		CacheInternalUnit current = cacheList.head.after;
+    long deleteSizeSum = 0;
+    HashMap<CacheUnit, PriorityQueue<LongPair>> tmpMap = new HashMap<>();
+    for(CacheUnit unit : input) {
+      CacheInternalUnit cache = null;
+      try {
+        cache = (CacheInternalUnit) getKeyFromBucket(unit.getBegin(), unit.getEnd());
+        mLockManager.readUnlock(cache.getFileId(), cache.readLock);
+        if(!tmpMap.containsKey(cache)) {
+          PriorityQueue<LongPair> queue = new PriorityQueue<>(new Comparator<LongPair>() {
+            @Override
+            public int compare(LongPair o1, LongPair o2) {
+              return (int)(o1.getKey() - o2.getKey());
+            }
+          });
+          LongPair p = new LongPair(unit.getBegin(), unit.getEnd());
+          queue.add(p);
+          tmpMap.put(cache, queue);
+        } else {
+          tmpMap.get(cache).add(new LongPair(unit.getBegin(), unit.getEnd()));
+        }
+      } catch (Exception e) {
+        e.printStackTrace();
+      }
+    }
+    CacheInternalUnit current = cacheList.head.after;
     Queue<LongPair> tmpQueue = new LinkedBlockingQueue<>();
     while(current != null ){
-			CacheInternalUnit next= null;
-			boolean deleteAll = false;
-			long deleteSize;
-			List<ReentrantReadWriteLock> writeLocks = mLockManager.deleteLock(current);
-			try {
+      CacheInternalUnit next= null;
+      boolean deleteAll = false;
+      long deleteSize;
+      List<ReentrantReadWriteLock> writeLocks = mLockManager.deleteLock(current);
+      try {
         if (tmpMap.containsKey(current)) {
-					cacheCoinFiliter(tmpMap.get(current), tmpQueue);
+          cacheCoinFiliter(tmpMap.get(current), tmpQueue);
           current.split(tmpQueue, mBuckets);
           tmpQueue.clear();
-				} else {
-					deleteAll = true;
+        } else {
+          deleteAll = true;
+        } if(!deleteAll) {
+          deleteSize = current.getDeleteSize();
+        } else {
+          deleteSize = current.getSize();
+          if(mContext.mUseGhostCache ) {
+            mContext.getGhostCache().add(new BaseCacheUnit(current.getBegin(),
+              current.getEnd(), mFileId));
+          }
         }
-				if(!deleteAll) {
-					deleteSize = current.getDeleteSize();
-				} else {
-					deleteSize = current.getSize();
-
-					if(mContext.mUseGhostCache ) {
-						mContext.getGhostCache().add(new BaseCacheUnit(current.getBegin(),
-							current.getEnd(), mFileId));
-					}
-				}
-				next = current.after;
-
-				if (deleteSize > 0) {
+        next = current.after;
+        if (deleteSize > 0) {
           mBuckets.delete(current);
           deleteSizeSum += deleteSize;
           cacheList.delete(current);
-
-					current.clearData();
-					current = null;
+          current.clearData();
+          current = null;
         }
-
-			} finally {
-				if( writeLocks != null) {
-					for(ReentrantReadWriteLock w : writeLocks) {
-						w.writeLock().unlock();
-					}
-				}
-				current = next;
-			}
+      } finally {
+        if( writeLocks != null) {
+          for(ReentrantReadWriteLock w : writeLocks) {
+            w.writeLock().unlock();
+          }
+        }
+        current = next;
+      }
     }
-		tmpMap.clear();
+    tmpMap.clear();
     tmpMap = null;
-		return deleteSizeSum;
+    return deleteSizeSum;
   }
 
   public CacheInternalUnit addCache(TempCacheUnit unit) {
-		while(!unit.deleteQueue.isEmpty()) {
-    	CacheInternalUnit unit1 =unit.deleteQueue.poll();
-			mBuckets.delete(unit1);
-			unit1.clearData();
-			unit1.before = unit1.after = null;
-			unit1 = null;
-		}
-
     CacheInternalUnit result = unit.convert();
+    while(!unit.deleteQueue.isEmpty()) {
+      CacheInternalUnit unit1 =unit.deleteQueue.poll();
+      mBuckets.delete(unit1);
+      unit1.clearData();
+      unit1.before = unit1.after = null;
+      unit1 = null;
+    }
+
     cacheList.insertBetween(result, result.before,result.after);
-		if(use_bucket) {
+    if(use_bucket) {
       mBuckets.add(result);
     }
-		return result;
+    return result;
   }
 
   public void print() {
@@ -193,27 +253,4 @@ public class FileCacheUnit {
     System.out.println();
     mBuckets.print();
   }
-
-  /*
-   * Free unUsed cacheInternalUnit, delete data if bytebuf ref = 0
-
-  public void freeCache() {
-    Iterator<CacheInternalUnit> iter = mFreeList.iterator();
-    CacheInternalUnit pre = null;
-    while(iter.hasNext()) {
-      CacheInternalUnit unit = iter.next();
-      if(pre != null) {
-        if(pre.clearData()) {
-          if(pre.before != null) {
-            pre.before.after = pre.after;
-          }
-          if(pre.after != null) {
-            pre.after.before = pre.before;
-          }
-          pre = null;
-        }
-      }
-      pre = unit;
-    }
-  } */
 }

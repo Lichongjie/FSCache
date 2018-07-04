@@ -37,12 +37,10 @@ public class CacheHitCalculatorTest {
 
   public void testFunction() {
     init();
-    cacheHitCalculator.function(input);
+		input.sortConvert();
+		cacheHitCalculator.function(input);
     System.out.println(cacheHitCalculator.mHitRatioMap.toString());
-    init();
-    cacheHitCalculator.function(input);
-    System.out.println(cacheHitCalculator.mHitRatioMap.toString());
-  }
+    }
 
 
   public void FunctionTest() {
@@ -65,6 +63,6 @@ public class CacheHitCalculatorTest {
   }
 
   public static void main(String [] args) {
-    new CacheHitCalculatorTest().FunctionTest();
+    new CacheHitCalculatorTest().testFunction();
   }
 }

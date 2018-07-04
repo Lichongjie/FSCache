@@ -4,6 +4,8 @@ import alluxio.client.file.cache.BaseCacheUnit;
 import alluxio.client.file.cache.CacheUnit;
 import alluxio.client.file.cache.ClientCacheContext;
 import alluxio.client.file.cache.struct.DoubleLinkedList;
+import alluxio.client.file.cache.struct.LongPair;
+import com.google.common.base.Preconditions;
 
 import java.util.*;
 
@@ -18,6 +20,38 @@ public class CacheSet implements Set<CacheUnit> {
   public Spliterator spliterator() {
     return null;
   }
+
+	public Map<Long, List<LongPair>> convertFromSort() {
+		Preconditions.checkNotNull(sortCacheMap);
+		Map<Long, List<LongPair>> res = new HashMap<>();
+		for(Map.Entry entry : sortCacheMap.entrySet()) {
+			long fileId = (long)entry.getKey();
+			Queue<CacheUnit> q = (Queue)entry.getValue();
+			LinkedList<LongPair> l = new LinkedList<>();
+
+			long maxEnd = -1;
+			long minBegin = -1;
+			while(!sortCacheMap.isEmpty()) {
+				CacheUnit tmpUnit = q.poll();
+				if(minBegin == -1) {
+					minBegin = tmpUnit.getBegin();
+					maxEnd = tmpUnit.getEnd();
+				} else {
+					if(tmpUnit.getBegin() <= maxEnd) {
+						maxEnd = Math.max(tmpUnit.getEnd() , maxEnd);
+					}
+					else {
+						l.add(new LongPair(minBegin, maxEnd));
+						minBegin = tmpUnit.getBegin();
+						maxEnd = tmpUnit.getEnd();
+					}
+				}
+			}
+			l.add(new LongPair(minBegin, maxEnd));
+			res.put(fileId, l);
+		}
+		return res;
+	}
 
   @Override
   public boolean isEmpty() {

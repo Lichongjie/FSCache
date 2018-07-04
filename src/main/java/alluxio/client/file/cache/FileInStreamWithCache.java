@@ -11,29 +11,38 @@
 
 package alluxio.client.file.cache;
 
+import alluxio.Client;
 import alluxio.client.file.FileInStream;
 import alluxio.client.file.FileSystemContext;
 import alluxio.client.file.URIStatus;
 import alluxio.client.file.options.InStreamOptions;
 import alluxio.exception.PreconditionMessage;
 import com.google.common.base.Preconditions;
+import org.omg.Messaging.SYNC_WITH_TRANSPORT;
+import sun.misc.Unsafe;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+
+import static alluxio.client.file.cache.ClientCacheContext.*;
 
 public class FileInStreamWithCache extends FileInStream {
   protected final ClientCacheContext mCacheContext;
   public CacheManager mCachePolicy;
-  private long mPosition;
-  private final long mLength;
-  private final long mFileId;
+  long mPosition;
+  final long mLength;
+  final long mFileId;
+  LockManager mLockManager;
 
   public FileInStreamWithCache(InStreamOptions opt, ClientCacheContext context, URIStatus status) {
     super(status, opt, FileSystemContext.INSTANCE);
     mCacheContext = context;
-		mCachePolicy = mCacheContext.CACHE_POLICY;
+		mCachePolicy = mCacheContext.getCacheManager();
 		mPosition = 0;
 		mLength = status.getLength();
 		mFileId = status.getFileId();
+		mLockManager = mCacheContext.getLockManager();
 	}
 
   public long getPos() {
@@ -48,16 +57,21 @@ public class FileInStreamWithCache extends FileInStream {
 	public int innerRead(byte[] b, int off, int len) throws  IOException {
   	int res =  super.read(b, off, len);
   	if(res > 0) mPosition += res;
-  	return res;
+
+		return res;
 	}
 
 	public int innerPositionRead(long pos, byte[] b, int off, int len) throws IOException {
-  	return super.positionedRead(pos, b, off, len);
+    long begin = System.currentTimeMillis();
+    int res =  super.positionedRead(pos, b, off, len);
+		missSize += res;
+    ClientCacheContext.testTime += System.currentTimeMillis() - begin;
+    return res;
 	}
 
 
-	private int read0(long pos, byte[] b, int off, int len) throws IOException {
-		boolean isPosition = false;
+	protected int read0(long pos, byte[] b, int off, int len) throws IOException {
+    boolean isPosition = false;
   	if(pos != mPosition) {
 			isPosition = true;
 		}
@@ -65,51 +79,58 @@ public class FileInStreamWithCache extends FileInStream {
 		if (pos < 0 || pos >=  length) {
 			return -1;
 		}
+		int res;
 
 		if (len == 0) {
 			return 0;
 		} else if (pos == mLength) { // at end of file
 			return -1;
 		}
-		CacheUnit unit = mCacheContext.getCache(mFileId, mLength, pos, Math.min(pos +
-				len,mLength));
-		if(unit.isFinish()) {
-			if(pos < unit.getBegin()) {
-
-				throw new RuntimeException(pos + " " + (pos +
-					len) + unit);
-			}
-			int remaining = mCachePolicy.read((CacheInternalUnit)unit, b, off, pos,
-				len);
-			if(!isPosition) {
-				mPosition += remaining;
-			}
-			return remaining;
-			//return -1;
-		}
-		else {
-			int res;
-			if (mCacheContext.mAllowCache) {
-				TempCacheUnit tmpUnit = (TempCacheUnit) unit;
-				tmpUnit.setInStream(this);
-				res = mCachePolicy.read(tmpUnit, b, off, len, pos);
-				if (res != len) {
-					// the end of file
-					tmpUnit.resetEnd((int) mLength);
-				}
-			} else {
-				for(int index: ((TempCacheUnit)unit).lockedIndex) {
-					mCacheContext.getLockManager().writeUnlock(unit.getFileId(), index);
-				}
-				if (isPosition) {
-					res = innerPositionRead(pos, b, off, len);
+		if (mLockManager.evictCheck()) {
+      try {
+				CacheUnit unit = mCacheContext.getCache(mFileId, mLength, pos, Math.min(pos +
+					len, mLength));
+				if (unit.isFinish()) {
+					if (pos < unit.getBegin()) {
+						throw new RuntimeException(pos + " " + (pos +
+							len) + unit);
+					}
+					int remaining = mCachePolicy.read((CacheInternalUnit) unit, b, off, pos,
+						len);
+					if (!isPosition) {
+						mPosition += remaining;
+					}
+          List<Character> l = new ArrayList<>() ;
+					l.add((char)('a' +1));
+					return remaining;
+					//return -1;
 				} else {
-					res = innerRead(b, off, len);
+          TempCacheUnit tmpUnit = (TempCacheUnit) unit;
+          if(mCacheContext.isAllowCache()) {
+            tmpUnit.setInStream(this);
+            res = mCachePolicy.read(tmpUnit, b, off, len, pos, true);
+            if (res != len) {
+              // the end of file
+              tmpUnit.resetEnd((int) mLength);
+            }
+          } else {
+            res = mCachePolicy.read(tmpUnit, b, off, len, pos, false);
+            tmpUnit = null;
+          }
 				}
+			} finally {
+        mLockManager.evictReadUnlock();
 			}
-			return res;
 		}
-	}
+    else{
+      if (isPosition) {
+        res = innerPositionRead(pos, b, off, len);
+      } else {
+        res = innerRead(b, off, len);
+      }
+    }
+    return res;
+  }
 
 	@Override
   public int read(byte[] b, int off, int len) throws IOException {
@@ -167,5 +188,11 @@ public class FileInStreamWithCache extends FileInStream {
 		}
     return skipLength;
   }
+
+	public int read(byte[] b, int pos, int off, int len) throws IOException {
+		int readLen = innerPositionRead(pos,b, off, len);
+  	mCachePolicy.promotionFliter(mFileId, pos, pos + readLen);
+  	return readLen;
+	}
 }
 

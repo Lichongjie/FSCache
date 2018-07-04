@@ -1,6 +1,8 @@
 package alluxio.client.file.cache;
 
 import alluxio.AlluxioURI;
+import alluxio.client.block.stream.BlockInStream;
+import alluxio.client.file.FileInStream;
 import alluxio.client.file.FileSystemContext;
 import alluxio.client.file.FileSystemMasterClient;
 import alluxio.client.file.URIStatus;
@@ -9,30 +11,53 @@ import alluxio.exception.AlluxioException;
 import alluxio.exception.status.AlluxioStatusException;
 import alluxio.exception.status.NotFoundException;
 import alluxio.exception.status.UnavailableException;
+import alluxio.network.protocol.databuffer.DataBuffer;
+import alluxio.proto.journal.Block;
+import alluxio.wire.BlockInfo;
+import com.google.common.collect.BiMap;
+import com.google.common.collect.HashBiMap;
+import com.google.common.collect.ImmutableBiMap;
 
+import javax.annotation.Nullable;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.*;
 
 public final class MetedataCache {
-	private Map<AlluxioURI, URIStatus> mURISet = new LinkedHashMap<>();
-	private FileSystemContext mFileSystemContext = FileSystemContext.INSTANCE;
-	private final long CHECKER_THREAD_INTERVAL = 1000;
-	private ClientCacheContext mContext = ClientCacheContext.INSTANCE;
 
-	public MetedataCache() {
+  private BiMap<AlluxioURI, URIStatus> mURISet = HashBiMap.create();
+  private Map<Long, URIStatus> mFileMetedataSet = new HashMap<>();
+  private FileSystemContext mFileSystemContext = FileSystemContext.INSTANCE;
+  private final long CHECKER_THREAD_INTERVAL = 1000;
+  private ClientCacheContext mContext = ClientCacheContext.INSTANCE;
+  public static Map<FileInStream, Map<Long, BlockInStream>> mBlockStreamCache
+    = new HashMap<>();
+  public HashMap<Long, Map<Long, DataBuffer>> tmpCache = new HashMap<>();
+
+
+
+  public MetedataCache() {
 		//mContext.COMPUTE_POOL.submit(new ExistChecker());
 	}
+
+	public AlluxioURI getUri(long fileId) {
+    return mURISet.inverse().get(mFileMetedataSet.get(fileId));
+  }
 
 	public URIStatus getStatus(AlluxioURI uri) {
 		return mURISet.get(uri);
 	}
 
+	public URIStatus getStatus(long fileId) {
+    return mFileMetedataSet.get(fileId);
+  }
 	public boolean cached(AlluxioURI uri) {
 		return mURISet.containsKey(uri);
 	}
 
 	public void cacheMetedata(AlluxioURI uri, URIStatus stus) {
 		mURISet.put(uri, stus);
+    mFileMetedataSet.put(stus.getFileId(), stus);
 	}
 
 	private boolean isExist(AlluxioURI path)

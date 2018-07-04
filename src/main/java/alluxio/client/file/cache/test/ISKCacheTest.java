@@ -16,7 +16,7 @@ import java.util.*;
 
 public class ISKCacheTest {
   CacheSet input = new CacheSet();
-  ISK isk = new ISK(100000, null);
+  ISK isk = new ISK(1000, null);
   public void init() {
     input.clear();
     //input.add(new CacheInternalUnit(0,15,1));
@@ -24,28 +24,30 @@ public class ISKCacheTest {
     //input.add(new CacheInternalUnit(20,35,1));
     //input.add(new CacheInternalUnit(30,45,1));
 
-    for(int i = 0 ; i < 1000; i ++) {
+    for(int i = 0 ; i < 5000; i ++) {
        Random r = new Random();
-      // int  begin = r.nextInt(100);
-       //int length = r.nextInt(100);
-      // int fileId = r.nextInt(1);
-		  // input.add(new BaseCacheUnit(begin, begin+length, fileId));
-			input.add(new BaseCacheUnit(i * 1024 , i*1024 + 1024
-				, 1));
+       int  begin = r.nextInt(2000);
+       int length = r.nextInt(1000);
+       int fileId = r.nextInt(1);
+		   input.add(new BaseCacheUnit(begin, begin+length, fileId));
+
+
     }
+
   }
 
   public void test() {
-  	long begin = System.currentTimeMillis();
     init();
     isk.addInputSpace(input);
 		System.out.println(new CacheSpaceCalculator().function(input));
-
+    long begin = System.currentTimeMillis();
 		isk.optimize();
     CacheSet res = isk.getResult();
-    System.out.println(new CacheSpaceCalculator().function(res));
     System.out.println(System.currentTimeMillis() - begin);
+
+    System.out.println(new CacheSpaceCalculator().function(res));
     System.out.println("end");
+    System.out.println(isk.iterNum);
   }
 
   public static void Test(List<Integer> e, List<List<Integer>> rew) {
@@ -89,13 +91,6 @@ public class ISKCacheTest {
   }
 
   public static void main(String [] args) throws Exception{
-  	byte[] tmp = new byte[10];
-  	byte[] original = new byte[10];
-  	byte[] newB = tmp;
-  	tmp[1] = 2;
-		FileOutputStream out = new FileOutputStream(new File(""));
-		out.write(tmp);
-  	ByteBuf b = Unpooled.wrappedBuffer(newB);
-  	System.out.println(b.getByte(1));
+  	new ISKCacheTest().test();
 	}
 }
