@@ -38,73 +38,67 @@ public class FileInStreamWithCache extends FileInStream {
   public FileInStreamWithCache(InStreamOptions opt, ClientCacheContext context, URIStatus status) {
     super(status, opt, FileSystemContext.INSTANCE);
     mCacheContext = context;
-		mCachePolicy = mCacheContext.getCacheManager();
-		mPosition = 0;
-		mLength = status.getLength();
-		mFileId = status.getFileId();
-		mLockManager = mCacheContext.getLockManager();
-	}
+    mCachePolicy = mCacheContext.getCacheManager();
+    mPosition = 0;
+    mLength = status.getLength();
+    mFileId = status.getFileId();
+    mLockManager = mCacheContext.getLockManager();
+  }
 
   public long getPos() {
-  	return mPosition;
-	}
+    return mPosition;
+  }
 
-	@Override
-	public int positionedRead(long pos, byte[] b, int off, int len) throws IOException {
-  	return read0(pos, b, off, len);
-	}
+  @Override
+  public int positionedRead(long pos, byte[] b, int off, int len) throws IOException {
+    return read0(pos, b, off, len);
+  }
 
-	public int innerRead(byte[] b, int off, int len) throws  IOException {
-  	int res =  super.read(b, off, len);
-  	if(res > 0) mPosition += res;
+  public int innerRead(byte[] b, int off, int len) throws  IOException {
+    int res =  super.read(b, off, len);
+    if(res > 0) mPosition += res;
+    return res;
+  }
 
-		return res;
-	}
-
-	public int innerPositionRead(long pos, byte[] b, int off, int len) throws IOException {
+  public int innerPositionRead(long pos, byte[] b, int off, int len) throws IOException {
     long begin = System.currentTimeMillis();
     int res =  super.positionedRead(pos, b, off, len);
-		missSize += res;
+    missSize += res;
     ClientCacheContext.testTime += System.currentTimeMillis() - begin;
     return res;
-	}
+  }
 
-
-	protected int read0(long pos, byte[] b, int off, int len) throws IOException {
+  protected int read0(long pos, byte[] b, int off, int len) throws IOException {
     boolean isPosition = false;
-  	if(pos != mPosition) {
-			isPosition = true;
-		}
-  	long length = mLength;
-		if (pos < 0 || pos >=  length) {
-			return -1;
-		}
-		int res;
-
-		if (len == 0) {
-			return 0;
-		} else if (pos == mLength) { // at end of file
-			return -1;
-		}
-		if (mLockManager.evictCheck()) {
+    if(pos != mPosition) {
+      isPosition = true;
+    }
+    long length = mLength;
+    if (pos < 0 || pos >=  length) {
+      return -1;
+    }
+    int res;
+    if (len == 0) {
+      return 0;
+    } else if (pos == mLength) { // at end of file
+      // return -1;
+    }
+    if (mLockManager.evictCheck()) {
       try {
-				CacheUnit unit = mCacheContext.getCache(mFileId, mLength, pos, Math.min(pos +
-					len, mLength));
-				if (unit.isFinish()) {
-					if (pos < unit.getBegin()) {
-						throw new RuntimeException(pos + " " + (pos +
-							len) + unit);
-					}
-					int remaining = mCachePolicy.read((CacheInternalUnit) unit, b, off, pos,
-						len);
-					if (!isPosition) {
-						mPosition += remaining;
-					}
+        CacheUnit unit = mCacheContext.getCache(mFileId, mLength, pos, Math.min(pos + len, mLength));
+        if (unit.isFinish()) {
+          if (pos < unit.getBegin()) {
+            throw new RuntimeException(pos + " " + (pos + len) + unit);
+          }
+          int remaining = mCachePolicy.read((CacheInternalUnit) unit, b, off, pos, len);
+          if (!isPosition) {
+            mPosition += remaining;
+          }
           List<Character> l = new ArrayList<>() ;
-					l.add((char)('a' +1));
-					return remaining;
-					//return -1;
-				} else {
+          l.add((char)('a' +1));
+          return remaining;
+          //return -1;
+        } else {
           TempCacheUnit tmpUnit = (TempCacheUnit) unit;
           if(mCacheContext.isAllowCache()) {
             tmpUnit.setInStream(this);
@@ -117,12 +111,11 @@ public class FileInStreamWithCache extends FileInStream {
             res = mCachePolicy.read(tmpUnit, b, off, len, pos, false);
             tmpUnit = null;
           }
-				}
-			} finally {
+        }
+      } finally {
         mLockManager.evictReadUnlock();
-			}
-		}
-    else{
+      }
+    } else{
       if (isPosition) {
         res = innerPositionRead(pos, b, off, len);
       } else {
@@ -184,15 +177,15 @@ public class FileInStreamWithCache extends FileInStream {
   public long skip(long n) throws IOException {
     long skipLength = super.skip(n);
     if(skipLength >0) {
-			mPosition += skipLength;
-		}
+      mPosition += skipLength;
+    }
     return skipLength;
   }
 
-	public int read(byte[] b, int pos, int off, int len) throws IOException {
-		int readLen = innerPositionRead(pos,b, off, len);
-  	mCachePolicy.promotionFliter(mFileId, pos, pos + readLen);
-  	return readLen;
-	}
+  public int read(byte[] b, int pos, int off, int len) throws IOException {
+    int readLen = innerPositionRead(pos,b, off, len);
+    mCachePolicy.promotionFliter(mFileId, pos, pos + readLen);
+    return readLen;
+  }
 }
 

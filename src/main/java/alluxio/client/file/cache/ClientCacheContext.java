@@ -34,12 +34,12 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public enum ClientCacheContext {
-	INSTANCE;
+  INSTANCE;
   public static long readTime = 0 ;
   public static long evictTime = 0 ;
   public static long testTime = 0;
   public static long testTime2 = 0;
-	public static final int CACHE_SIZE = 1048576;
+  public static final int CACHE_SIZE = 1048576;
   public static final int BUCKET_LENGTH = 10;
   public static final String mCacheSpaceLimit = "200m";
   public static final long mCacheLimit = getSpaceLimit();
@@ -360,7 +360,7 @@ public enum ClientCacheContext {
       if (addCache) {
         if (current.mBucketIndex != currentIndex) {
           currentIndex--;
-					 mLockManager.writeLock(current.getFileId(), current.mBucketIndex, currentIndex, result);
+          mLockManager.writeLock(current.getFileId(), current.mBucketIndex, currentIndex, result);
         }
         result.addResourceReverse(current);
         already += current.getSize();
@@ -470,76 +470,73 @@ public enum ClientCacheContext {
   }
 
   public class FakeLockManager implements LockManager {
-		public void lock(){}
+    public void lock(){}
 
-		public ReentrantReadWriteLock initBucketLock(long fileId, int bucketIndex){
+    public ReentrantReadWriteLock initBucketLock(long fileId, int bucketIndex){
 			return null;
 		}
 
-		public void readLock(long fileId, int
-			bucketIndex, String tag) {
-		}
+    public void readLock(long fileId, int bucketIndex, String tag) {}
 
-		public void readUnlock(long fileId, int bucketIndex) {
-		}
+    public void readUnlock(long fileId, int bucketIndex) {}
 
-		public ReentrantReadWriteLock getLock(long fileId, int
-			bucketIndex){
-			return null;
-		}
+    public ReentrantReadWriteLock getLock(long fileId, int bucketIndex){
+      return null;
+    }
 
-		public void writeUnlock(long fileId, int bucketIndex){}
+    public void writeUnlock(long fileId, int bucketIndex){}
 
-		public void lockUpgrade(long fileId, int index){}
+    public void lockUpgrade(long fileId, int index){}
 
-		public void lockUpgrade(long fileId, int beginIndex , int EndIndex, TempCacheUnit unit){ }
+    public void lockUpgrade(long fileId, int beginIndex , int EndIndex, TempCacheUnit unit){ }
 
 		public void writeLock(long fileId, int beginIndex , int
-			EndIndex, TempCacheUnit unit){}
+            EndIndex, TempCacheUnit unit){}
 
-		public void writeLock(long fileId, int beginIndex , int
-			EndIndex, ArrayList<ReentrantReadWriteLock> l){}
+    public void writeLock(long fileId, int beginIndex , int EndIndex,
+           ArrayList<ReentrantReadWriteLock> l){}
 
-		public boolean evictCheck() {
+    public boolean evictCheck() {
 			return false;
 		}
 
-		public void evictReadUnlock(){}
+    public void evictReadUnlock(){}
     public void writeUnlockList(long fileId, Collection<Integer> c) {}
     public List<ReentrantReadWriteLock> deleteLock(CacheInternalUnit unit) {return null;}
 	}
 
 	public interface LockManager {
 
-		public void lock();
+    public void lock();
 
-		public ReentrantReadWriteLock initBucketLock(long fileId, int bucketIndex);
+    public ReentrantReadWriteLock initBucketLock(long fileId, int bucketIndex);
 
-		public void readLock(long fileId, int
-			bucketIndex, String tag) ;
+    public void readLock(long fileId, int bucketIndex, String tag);
 
-		public void readUnlock(long fileId, int bucketIndex) ;
+    public void readUnlock(long fileId, int bucketIndex);
 
+    public ReentrantReadWriteLock getLock(long fileId, int bucketIndex) ;
 
-		public ReentrantReadWriteLock getLock(long fileId, int
-			bucketIndex) ;
+    public void writeUnlock(long fileId, int bucketIndex) ;
 
-		public void writeUnlock(long fileId, int bucketIndex) ;
-		public void lockUpgrade(long fileId, int index);
+    public void lockUpgrade(long fileId, int index);
 
-		public  void lockUpgrade(long fileId, int beginIndex , int EndIndex, TempCacheUnit unit);
+    public  void lockUpgrade(long fileId, int beginIndex , int EndIndex, TempCacheUnit unit);
 
-		public void writeLock(long fileId, int beginIndex , int
-			EndIndex, TempCacheUnit unit) ;
+    public void writeLock(long fileId, int beginIndex , int
+            EndIndex, TempCacheUnit unit) ;
 
-		public void writeLock(long fileId, int beginIndex , int
-			EndIndex, ArrayList<ReentrantReadWriteLock> l) ;
-		public boolean evictCheck();
-		public void evictReadUnlock();
+    public void writeLock(long fileId, int beginIndex , int
+            EndIndex, ArrayList<ReentrantReadWriteLock> l) ;
+
+    public boolean evictCheck();
+
+    public void evictReadUnlock();
+
     public void writeUnlockList(long fileId, Collection<Integer>
             c);
-    public List<ReentrantReadWriteLock> deleteLock(CacheInternalUnit unit) ;
 
+    public List<ReentrantReadWriteLock> deleteLock(CacheInternalUnit unit) ;
 	}
 
   public class RWLockManager  implements LockManager {

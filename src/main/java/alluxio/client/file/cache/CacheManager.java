@@ -20,7 +20,7 @@ public final class CacheManager {
   }
 
   public void promotionFliter(long fileId, long begin, long end) {
-  	mPolicy.fliter(new BaseCacheUnit(fileId, begin, end));
+    mPolicy.fliter(new BaseCacheUnit(fileId, begin, end));
 	}
 
   public void setPolicy() {
@@ -61,5 +61,5 @@ public final class CacheManager {
 
   public int cache(TempCacheUnit unit, long pos, int len) throws IOException {
     return unit.cache(pos, len);
-	}
+  }
 }
