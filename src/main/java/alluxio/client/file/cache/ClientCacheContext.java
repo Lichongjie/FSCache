@@ -12,6 +12,9 @@
 package alluxio.client.file.cache;
 
 import alluxio.AlluxioURI;
+import alluxio.client.Configuration;
+import alluxio.client.Constants;
+import alluxio.client.file.CacheFileSystem;
 import alluxio.client.file.URIStatus;
 import alluxio.client.file.cache.struct.DoubleLinkedList;
 import alluxio.client.file.cache.struct.LongPair;
@@ -20,6 +23,7 @@ import alluxio.client.file.cache.submodularLib.cacheSet.CacheSet;
 import alluxio.exception.AlluxioException;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.PooledByteBufAllocator;
+import sun.misc.Cache;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -39,10 +43,10 @@ public enum ClientCacheContext {
   public static long evictTime = 0 ;
   public static long testTime = 0;
   public static long testTime2 = 0;
-  public static final int CACHE_SIZE = 1048576;
+  public final int CACHE_SIZE = Configuration.INSTANCE.getInt(Constants.CACHE_SIZE);
   public static final int BUCKET_LENGTH = 10;
-  public static final String mCacheSpaceLimit = "200m";
-  public static final long mCacheLimit = getSpaceLimit();
+  public static final String mCacheSpaceLimit = Configuration.INSTANCE.getString(Constants.CACHE_SPACE_LIMIT);
+  public final long mCacheLimit = getSpaceLimit();
   public static boolean REVERSE = true;
   public boolean USE_INDEX_0 = true;
   private final CacheManager CACHE_POLICY = new CacheManager();
@@ -503,6 +507,8 @@ public enum ClientCacheContext {
     public void evictReadUnlock(){}
     public void writeUnlockList(long fileId, Collection<Integer> c) {}
     public List<ReentrantReadWriteLock> deleteLock(CacheInternalUnit unit) {return null;}
+    public void evictStart(){}
+    public void evictEnd(){}
 	}
 
 	public interface LockManager {
@@ -537,6 +543,8 @@ public enum ClientCacheContext {
             c);
 
     public List<ReentrantReadWriteLock> deleteLock(CacheInternalUnit unit) ;
+    public void evictStart();
+    public void evictEnd();
 	}
 
   public class RWLockManager  implements LockManager {
@@ -567,7 +575,7 @@ public enum ClientCacheContext {
 
     public ReentrantReadWriteLock initBucketLock(long fileId, int bucketIndex) {
       if(!mCacheLock.containsKey(fileId)) {
-        mCacheLock.put(fileId, new ConcurrentHashMap<>());
+        mCacheLock.put(fileId, new ConcurrentHashMap());
       }
       ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
       mCacheLock.get(fileId).put(bucketIndex, lock);

@@ -34,9 +34,16 @@
     <dependencies>
         <!-- https://mvnrepository.com/artifact/org.alluxio/alluxio-core-client -->
         <dependency>
-        <groupId>org.alluxio</groupId>
-        <artifactId>alluxio-core-client-fs</artifactId>
-        <version>${alluxio.version}</version>
+            <groupId>org.alluxio</groupId>
+            <artifactId>alluxio-core-client-fs</artifactId>
+            <version>${alluxio.version}</version>
+        </dependency>
+        <!-- https://mvnrepository.com/artifact/org.alluxio/alluxio-core-client -->
+        <dependency>
+            <groupId>org.alluxio</groupId>
+            <artifactId>alluxio-core-client</artifactId>
+            <version>${alluxio.version}</version>
+            <type>pom</type>
         </dependency>
     </dependencies>
 

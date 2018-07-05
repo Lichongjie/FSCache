@@ -12,6 +12,7 @@
 package alluxio.client.file.cache;
 
 import alluxio.AlluxioURI;
+import alluxio.client.file.CacheFileSystem;
 import alluxio.client.file.FileInStream;
 import alluxio.client.file.FileSystem;
 import alluxio.client.file.cache.struct.DoubleLinkedList;
@@ -107,7 +108,7 @@ public class FileCacheUnit {
   public long merge(AlluxioURI uri, PriorityQueue<CacheUnit> queue)
           throws IOException, AlluxioException {
     Iterator<CacheInternalUnit> iterator = cacheList.iterator();
-    FileSystem fs = FileSystem.Factory.get(true);
+    FileSystem fs = CacheFileSystem.Factory.get();
     FileInStream in = fs.openFile(uri);
     Set<CacheInternalUnit> needDeleteSet = new LinkedHashSet<>();
     while (iterator.hasNext()) {
